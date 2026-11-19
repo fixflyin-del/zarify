@@ -17,6 +17,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
 import { apiRequest, formatINR } from '../lib/api';
+import { DEFAULT_PRODUCTS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
 import type { Product, ReviewItem } from '../types';
@@ -97,7 +98,25 @@ export function ProductDetailPage() {
           // ignore storage errors
         }
       } catch {
-        if (active) setProduct(null);
+        if (active) {
+          const fallbackProd = DEFAULT_PRODUCTS.find((p) => p.slug === slug) || null;
+          setProduct(fallbackProd);
+          if (fallbackProd) {
+            const defaultVar =
+              fallbackProd.variants.find((v) => v.stockQuantity > 0) || fallbackProd.variants[0];
+            if (defaultVar) {
+              setSelectedColor(defaultVar.colorName);
+              setSelectedSize(defaultVar.sizeName);
+            }
+            setReviews([]);
+            setDistribution([5, 4, 3, 2, 1].map((star) => ({ star, count: 0 })));
+            setRelatedProducts(
+              DEFAULT_PRODUCTS.filter(
+                (p) => p.categoryId === fallbackProd.categoryId && p.id !== fallbackProd.id
+              ).slice(0, 4)
+            );
+          }
+        }
       } finally {
         if (active) setLoading(false);
       }

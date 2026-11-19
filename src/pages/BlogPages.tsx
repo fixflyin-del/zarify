@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Share2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { apiRequest } from '../lib/api';
+import { DEFAULT_BLOGS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import type { BlogPost } from '../types';
 
@@ -13,8 +14,8 @@ export function BlogListPage() {
 
   useEffect(() => {
     apiRequest<{ blogs: BlogPost[] }>('/api/blogs')
-      .then((res) => setPosts(res.blogs || []))
-      .catch(() => setPosts([]))
+      .then((res) => setPosts(res.blogs?.length ? res.blogs : DEFAULT_BLOGS))
+      .catch(() => setPosts(DEFAULT_BLOGS))
       .finally(() => setLoading(false));
   }, []);
 
@@ -114,7 +115,11 @@ export function BlogDetailPage() {
         setPost(res.blog);
         setRelated(res.related || []);
       })
-      .catch(() => setPost(null))
+      .catch(() => {
+        const fallback = DEFAULT_BLOGS.find((b) => b.slug === slug) || null;
+        setPost(fallback);
+        setRelated(fallback ? DEFAULT_BLOGS.filter((b) => b.id !== fallback.id).slice(0, 3) : []);
+      })
       .finally(() => setLoading(false));
   }, [slug]);
 

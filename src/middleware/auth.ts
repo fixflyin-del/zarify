@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { eq } from 'drizzle-orm';
 import { adminAuth } from '../lib/firebase-admin.ts';
-import { db } from '../db/index.ts';
+import { db, isDatabaseConfigured } from '../db/index.ts';
 import { users } from '../db/schema.ts';
 
 export const JWT_SECRET =
@@ -33,12 +33,44 @@ export interface AuthRequest extends Request {
   dbUser?: DbUser;
 }
 
-export function signSessionToken(user: { id: number; uid: string; email: string; role: string }) {
+interface SessionJwtPayload {
+  id: number;
+  uid: string;
+  email: string;
+  role: string;
+  fullName?: string;
+}
+
+export function signSessionToken(user: {
+  id: number;
+  uid: string;
+  email: string;
+  role: string;
+  fullName?: string;
+}) {
   return jwt.sign(
-    { id: user.id, uid: user.uid, email: user.email, role: user.role },
+    {
+      id: user.id,
+      uid: user.uid,
+      email: user.email,
+      role: user.role,
+      fullName: user.fullName || user.email.split('@')[0],
+    },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
+}
+
+function userFromJwtPayload(payload: SessionJwtPayload): DbUser {
+  return {
+    id: payload.id,
+    uid: payload.uid || `fallback-${payload.id}`,
+    email: payload.email,
+    fullName: payload.fullName || payload.email?.split('@')[0] || 'ZARIFLY Admin',
+    phone: '',
+    role: payload.role || (ADMIN_EMAILS.has((payload.email || '').toLowerCase()) ? 'super_admin' : 'customer'),
+    preferredLang: 'en',
+  };
 }
 
 export async function getOrCreateFirebaseUser(
@@ -49,8 +81,19 @@ export async function getOrCreateFirebaseUser(
   const normalizedEmail = email.trim().toLowerCase();
   const defaultRole = ADMIN_EMAILS.has(normalizedEmail) ? 'super_admin' : 'customer';
 
+  if (!isDatabaseConfigured()) {
+    return {
+      id: defaultRole === 'super_admin' ? 999001 : 999100,
+      uid,
+      email: normalizedEmail,
+      fullName: fullName || normalizedEmail.split('@')[0],
+      phone: '',
+      role: defaultRole,
+      preferredLang: 'en',
+    };
+  }
+
   try {
-    // Check if an account already exists by email
     const existingByEmail = await db
       .select()
       .from(users)
@@ -95,8 +138,37 @@ export async function getOrCreateFirebaseUser(
 
     return result[0];
   } catch (error) {
-    console.error('Database user upsert failed:', error);
-    throw new Error('Failed to synchronize user account.', { cause: error });
+    console.error('Database user upsert failed (using session fallback):', error);
+    return {
+      id: defaultRole === 'super_admin' ? 999001 : 999100,
+      uid,
+      email: normalizedEmail,
+      fullName: fullName || normalizedEmail.split('@')[0],
+      phone: '',
+      role: defaultRole,
+      preferredLang: 'en',
+    };
+  }
+}
+
+async function resolveFromSessionJwt(token: string): Promise<DbUser | null> {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as SessionJwtPayload;
+    if (!isDatabaseConfigured()) {
+      return userFromJwtPayload(payload);
+    }
+    try {
+      const found = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
+      if (found.length > 0) return found[0];
+      if (payload.email && ADMIN_EMAILS.has(payload.email.toLowerCase())) {
+        return userFromJwtPayload(payload);
+      }
+      return null;
+    } catch {
+      return userFromJwtPayload(payload);
+    }
+  } catch {
+    return null;
   }
 }
 
@@ -105,34 +177,25 @@ async function resolveUserFromRequest(req: AuthRequest): Promise<DbUser | null> 
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
-    // Try Firebase ID token first
+    // Try local JWT first (fast, works offline/Vercel without Firebase Admin creds)
+    const jwtUser = await resolveFromSessionJwt(token);
+    if (jwtUser) return jwtUser;
+
+    // Try Firebase ID token
     try {
       const decoded = await adminAuth.verifyIdToken(token);
       if (decoded.email) {
         return await getOrCreateFirebaseUser(decoded.uid, decoded.email, decoded.name);
       }
     } catch {
-      // Fallback to local JWT
-      try {
-        const payload = jwt.verify(token, JWT_SECRET) as { id: number };
-        const found = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
-        if (found.length > 0) return found[0];
-      } catch {
-        return null;
-      }
+      return null;
     }
   }
 
   // 2. Check httpOnly session cookie
   const cookieToken = req.cookies?.zarifly_session;
   if (cookieToken) {
-    try {
-      const payload = jwt.verify(cookieToken, JWT_SECRET) as { id: number };
-      const found = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
-      if (found.length > 0) return found[0];
-    } catch {
-      return null;
-    }
+    return await resolveFromSessionJwt(cookieToken);
   }
 
   return null;

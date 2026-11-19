@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { apiRequest } from '../lib/api';
+import { DEFAULT_PRODUCTS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
 import type { Product } from '../types';
@@ -39,7 +40,34 @@ export function ShopPage({ collectionSlug }: ShopPageProps) {
         const data = await apiRequest<{ products: Product[] }>(`/api/products?${qs.toString()}`);
         if (active) setProducts(data.products || []);
       } catch (err) {
-        console.error('Shop load error:', err);
+        console.error('Shop load error (using default catalog):', err);
+        if (active) {
+          let fallback = [...DEFAULT_PRODUCTS];
+          if (activeCategory && activeCategory !== 'all') {
+            fallback = fallback.filter((p) => p.category?.slug === activeCategory);
+          }
+          if (search) {
+            const q = search.toLowerCase();
+            fallback = fallback.filter(
+              (p) =>
+                p.name.toLowerCase().includes(q) ||
+                p.description.toLowerCase().includes(q) ||
+                p.fabric.toLowerCase().includes(q)
+            );
+          }
+          if (maxPrice && !Number.isNaN(Number(maxPrice))) {
+            fallback = fallback.filter((p) => p.sellingPrice <= Number(maxPrice));
+          }
+          if (searchParams.get('newArrival') === 'true') {
+            fallback = fallback.filter((p) => p.isNewArrival);
+          }
+          if (sort === 'price_asc') fallback.sort((a, b) => a.sellingPrice - b.sellingPrice);
+          else if (sort === 'price_desc') fallback.sort((a, b) => b.sellingPrice - a.sellingPrice);
+          else if (sort === 'bestselling') {
+            fallback.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
+          }
+          setProducts(fallback);
+        }
       } finally {
         if (active) setLoading(false);
       }

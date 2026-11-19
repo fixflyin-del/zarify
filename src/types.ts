@@ -139,6 +139,7 @@ export interface ReelItem {
 
 export interface ReviewItem {
   id: number;
+  productId?: number;
   rating: number;
   title?: string;
   comment: string;

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, googleAuthProvider } from '../lib/firebase';
 import { apiRequest, setAuthToken } from '../lib/api';
+import { DEFAULT_BOOTSTRAP } from '../lib/defaultCatalog';
 import { translations } from '../i18n/translations';
 import type {
   Banner,
@@ -132,9 +133,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       setBootstrapLoading(true);
       const data = await apiRequest<BootstrapData>('/api/bootstrap');
-      setBootstrap(data);
+      if (data && (data.banners?.length || data.categories?.length || data.bestSellers?.length)) {
+        setBootstrap(data);
+      } else {
+        setBootstrap(DEFAULT_BOOTSTRAP);
+      }
     } catch (err) {
-      console.error('Bootstrap fetch error:', err);
+      console.error('Bootstrap fetch error (using default catalog):', err);
+      setBootstrap((prev) => prev || DEFAULT_BOOTSTRAP);
     } finally {
       setBootstrapLoading(false);
     }

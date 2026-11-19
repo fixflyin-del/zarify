@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, asc, desc, eq, ilike, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { db } from '../../db/index.ts';
+import { db, isDatabaseConfigured } from '../../db/index.ts';
 import {
   banners,
   blogs,
@@ -17,6 +17,7 @@ import {
   users,
 } from '../../db/schema.ts';
 import { ensureSeeded } from '../../db/seed.ts';
+import { getFallbackBootstrap, getFallbackState } from '../fallbackStore.ts';
 
 const router = Router();
 
@@ -66,7 +67,60 @@ export async function hydrateProducts(productRows: (typeof products.$inferSelect
   });
 }
 
+function queryFallbackProducts(query: Record<string, any>) {
+  const state = getFallbackState();
+  const { category, search, bestSeller, newArrival, sort, color, minPrice, maxPrice } = query;
+  let items = state.products.filter((p) => p.isActive);
+
+  if (typeof category === 'string' && category && category !== 'all') {
+    items = items.filter((p) => p.category?.slug === category);
+  }
+  if (bestSeller === 'true') {
+    items = items.filter((p) => p.isBestSeller);
+  }
+  if (newArrival === 'true') {
+    items = items.filter((p) => p.isNewArrival);
+  }
+  if (typeof search === 'string' && search.trim()) {
+    const q = search.trim().toLowerCase();
+    items = items.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.fabric.toLowerCase().includes(q) ||
+        p.workDetails.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q)
+    );
+  }
+  if (typeof color === 'string' && color.trim()) {
+    const cLower = color.trim().toLowerCase();
+    items = items.filter((p) =>
+      p.variants.some((v) => v.colorName.toLowerCase().includes(cLower))
+    );
+  }
+  if (minPrice && !Number.isNaN(Number(minPrice))) {
+    items = items.filter((p) => p.sellingPrice >= Number(minPrice));
+  }
+  if (maxPrice && !Number.isNaN(Number(maxPrice))) {
+    items = items.filter((p) => p.sellingPrice <= Number(maxPrice));
+  }
+
+  const sorted = [...items];
+  if (sort === 'price_asc') {
+    sorted.sort((a, b) => a.sellingPrice - b.sellingPrice);
+  } else if (sort === 'price_desc') {
+    sorted.sort((a, b) => b.sellingPrice - a.sellingPrice);
+  } else if (sort === 'bestselling') {
+    sorted.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
+  }
+
+  return sorted;
+}
+
 router.get('/bootstrap', async (_req, res) => {
+  if (!isDatabaseConfigured()) {
+    return res.json(getFallbackBootstrap());
+  }
   try {
     await ensureSeeded();
     const [settingsRows, catRows, bannerRows, reelRows, prodRows, blogRows, revRows] =
@@ -93,7 +147,7 @@ router.get('/bootstrap', async (_req, res) => {
           .from(blogs)
           .where(eq(blogs.isPublished, true))
           .orderBy(desc(blogs.publishedAt))
-          .limit(4),
+          .limit(6),
         db
           .select({
             id: reviews.id,
@@ -133,12 +187,15 @@ router.get('/bootstrap', async (_req, res) => {
       blogs: blogRows,
     });
   } catch (error) {
-    console.error('Bootstrap error:', error);
-    res.status(500).json({ error: 'Unable to load storefront data.' });
+    console.error('Bootstrap DB error (serving fallback catalog):', error);
+    res.json(getFallbackBootstrap());
   }
 });
 
 router.get('/products', async (req, res) => {
+  if (!isDatabaseConfigured()) {
+    return res.json({ products: queryFallbackProducts(req.query) });
+  }
   try {
     await ensureSeeded();
     const { category, search, bestSeller, newArrival, sort, color, minPrice, maxPrice } = req.query;
@@ -202,12 +259,41 @@ router.get('/products', async (req, res) => {
 
     res.json({ products: hydrated });
   } catch (error) {
-    console.error('Products list error:', error);
-    res.status(500).json({ error: 'Unable to load products.' });
+    console.error('Products list DB error (serving fallback):', error);
+    res.json({ products: queryFallbackProducts(req.query) });
   }
 });
 
 router.get('/products/:slug', async (req, res) => {
+  const respondFallback = () => {
+    const state = getFallbackState();
+    const product = state.products.find((p) => p.slug === req.params.slug && p.isActive);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found.' });
+    }
+    const productReviews = state.reviews.filter(
+      (r) => r.productId === product.id && r.status === 'approved'
+    );
+    const distribution = [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: productReviews.filter((r) => r.rating === star).length,
+    }));
+    const related = state.products
+      .filter((p) => p.categoryId === product.categoryId && p.id !== product.id && p.isActive)
+      .slice(0, 4);
+
+    return res.json({
+      product,
+      reviews: productReviews,
+      ratingDistribution: distribution,
+      relatedProducts: related,
+    });
+  };
+
+  if (!isDatabaseConfigured()) {
+    return respondFallback();
+  }
+
   try {
     await ensureSeeded();
     const { slug } = req.params;
@@ -249,7 +335,9 @@ router.get('/products/:slug', async (req, res) => {
       .from(products)
       .where(and(eq(products.categoryId, product.categoryId), eq(products.isActive, true)))
       .limit(5);
-    const related = (await hydrateProducts(relatedRows)).filter((p) => p.id !== product.id).slice(0, 4);
+    const related = (await hydrateProducts(relatedRows))
+      .filter((p) => p.id !== product.id)
+      .slice(0, 4);
 
     res.json({
       product,
@@ -258,12 +346,15 @@ router.get('/products/:slug', async (req, res) => {
       relatedProducts: related,
     });
   } catch (error) {
-    console.error('Product detail error:', error);
-    res.status(500).json({ error: 'Unable to load product details.' });
+    console.error('Product detail DB error (serving fallback):', error);
+    return respondFallback();
   }
 });
 
 router.get('/blogs', async (_req, res) => {
+  if (!isDatabaseConfigured()) {
+    return res.json({ blogs: getFallbackState().blogs.filter((b) => b.isPublished) });
+  }
   try {
     await ensureSeeded();
     const rows = await db
@@ -273,12 +364,25 @@ router.get('/blogs', async (_req, res) => {
       .orderBy(desc(blogs.publishedAt));
     res.json({ blogs: rows });
   } catch (error) {
-    console.error('Blogs error:', error);
-    res.status(500).json({ error: 'Unable to load blog articles.' });
+    console.error('Blogs DB error (serving fallback):', error);
+    res.json({ blogs: getFallbackState().blogs.filter((b) => b.isPublished) });
   }
 });
 
 router.get('/blogs/:slug', async (req, res) => {
+  const respondFallback = () => {
+    const published = getFallbackState().blogs.filter((b) => b.isPublished);
+    const found = published.find((b) => b.slug === req.params.slug);
+    if (!found) return res.status(404).json({ error: 'Article not found.' });
+    return res.json({
+      blog: found,
+      related: published.filter((b) => b.id !== found.id).slice(0, 3),
+    });
+  };
+
+  if (!isDatabaseConfigured()) {
+    return respondFallback();
+  }
   try {
     await ensureSeeded();
     const rows = await db
@@ -300,8 +404,8 @@ router.get('/blogs/:slug', async (req, res) => {
       related: related.filter((b) => b.id !== rows[0].id).slice(0, 3),
     });
   } catch (error) {
-    console.error('Blog detail error:', error);
-    res.status(500).json({ error: 'Unable to load article.' });
+    console.error('Blog detail DB error (serving fallback):', error);
+    return respondFallback();
   }
 });
 
@@ -311,15 +415,24 @@ router.post('/newsletter', async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
+  const email = parsed.data.email.trim().toLowerCase();
+  if (!isDatabaseConfigured()) {
+    const s = getFallbackState();
+    if (!s.subscribers.some((sub) => sub.email === email)) {
+      s.subscribers.unshift({ id: s.nextId++, email, createdAt: new Date().toISOString() });
+    }
+    return res.json({ ok: true, message: 'Subscribed successfully to ZARIFLY.' });
+  }
   try {
-    await db
-      .insert(newsletterSubscribers)
-      .values({ email: parsed.data.email.trim().toLowerCase() })
-      .onConflictDoNothing();
+    await db.insert(newsletterSubscribers).values({ email }).onConflictDoNothing();
     res.json({ ok: true, message: 'Subscribed successfully to ZARIFLY.' });
   } catch (error) {
     console.error('Newsletter error:', error);
-    res.status(500).json({ error: 'Unable to save subscription.' });
+    const s = getFallbackState();
+    if (!s.subscribers.some((sub) => sub.email === email)) {
+      s.subscribers.unshift({ id: s.nextId++, email, createdAt: new Date().toISOString() });
+    }
+    res.json({ ok: true, message: 'Subscribed successfully to ZARIFLY.' });
   }
 });
 
@@ -335,12 +448,21 @@ router.post('/contact', async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'Please complete all required contact fields.' });
   }
+  if (!isDatabaseConfigured()) {
+    const s = getFallbackState();
+    const id = s.nextId++;
+    s.messages.unshift({ id, ...parsed.data, createdAt: new Date().toISOString() });
+    return res.status(201).json({ ok: true, messageId: id });
+  }
   try {
     const [saved] = await db.insert(contactMessages).values(parsed.data).returning();
     res.status(201).json({ ok: true, messageId: saved.id });
   } catch (error) {
     console.error('Contact error:', error);
-    res.status(500).json({ error: 'Unable to submit inquiry.' });
+    const s = getFallbackState();
+    const id = s.nextId++;
+    s.messages.unshift({ id, ...parsed.data, createdAt: new Date().toISOString() });
+    res.status(201).json({ ok: true, messageId: id });
   }
 });
 
@@ -366,9 +488,22 @@ router.get('/pincode/:pin', async (req, res) => {
     const district = po.District || '';
     const city = po.Block && po.Block !== 'NA' ? po.Block : district || po.Name || '';
 
-    // Shipping zone estimation based on Maharashtra/Mumbai boutique dispatch
-    const isMetroOrWest = ['Maharashtra', 'Gujarat', 'Goa', 'Karnataka', 'Delhi', 'Telangana', 'Tamil Nadu', 'West Bengal'].includes(state);
-    const estimatedDays = state === 'Maharashtra' ? '2–3 Business Days' : isMetroOrWest ? '3–5 Business Days' : '5–7 Business Days';
+    const isMetroOrWest = [
+      'Maharashtra',
+      'Gujarat',
+      'Goa',
+      'Karnataka',
+      'Delhi',
+      'Telangana',
+      'Tamil Nadu',
+      'West Bengal',
+    ].includes(state);
+    const estimatedDays =
+      state === 'Maharashtra'
+        ? '2–3 Business Days'
+        : isMetroOrWest
+          ? '3–5 Business Days'
+          : '5–7 Business Days';
 
     res.json({
       serviceable: true,
@@ -384,7 +519,8 @@ router.get('/pincode/:pin', async (req, res) => {
     console.error('PIN lookup error:', error);
     res.status(502).json({
       serviceable: false,
-      error: 'Postal lookup service is temporarily unavailable. You may enter your city and state manually.',
+      error:
+        'Postal lookup service is temporarily unavailable. You may enter your city and state manually.',
     });
   }
 });
@@ -433,7 +569,9 @@ router.get('/reverse-geocode', async (req, res) => {
     });
   } catch (error) {
     console.error('Reverse geocode error:', error);
-    res.status(502).json({ error: 'Unable to resolve address from coordinates. Please enter manually.' });
+    res
+      .status(502)
+      .json({ error: 'Unable to resolve address from coordinates. Please enter manually.' });
   }
 });
 

@@ -1,9 +1,18 @@
 const CART_SESSION_KEY = 'zarifly_cart_session';
+const AUTH_TOKEN_KEY = 'zarifly_auth_token';
 
-let inMemoryAuthToken: string | null = null;
+let inMemoryAuthToken: string | null =
+  typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_KEY) : null;
 
 export function setAuthToken(token: string | null) {
   inMemoryAuthToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) {
+      window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    } else {
+      window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }
 }
 
 export function getCartSessionId(): string {
@@ -28,8 +37,11 @@ export async function apiRequest<T = any>(
   if (sid) {
     headers.set('x-cart-session', sid);
   }
-  if (inMemoryAuthToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${inMemoryAuthToken}`);
+  const activeToken =
+    inMemoryAuthToken ||
+    (typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_KEY) : null);
+  if (activeToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${activeToken}`);
   }
 
   const response = await fetch(url, {
