@@ -1,0 +1,504 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered ZARIFLY customer profile stored in Cloud Firestore.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Authentication UID." },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin", "super_admin"] },
+        "preferredLang": { "type": "string", "enum": ["en", "hi"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "fullName", "phone", "role", "preferredLang", "createdAt", "updatedAt"]
+    },
+    "UserAddress": {
+      "title": "UserAddress",
+      "description": "Saved customer delivery address.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "houseFlat": { "type": "string" },
+        "streetArea": { "type": "string" },
+        "city": { "type": "string" },
+        "district": { "type": "string" },
+        "state": { "type": "string" },
+        "pincode": { "type": "string" },
+        "landmark": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fullName", "mobile", "houseFlat", "streetArea", "city", "state", "pincode", "isDefault", "createdAt"]
+    },
+    "WishlistItem": {
+      "title": "WishlistItem",
+      "description": "Product saved to a customer wishlist.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productId", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized ZARIFLY administrator record mapped by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "super_admin"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "fullName", "role", "isActive", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Storefront product category (Hijabs, Naqaabs, Dupattas).",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string" },
+        "name": { "type": "string" },
+        "nameHi": { "type": "string" },
+        "description": { "type": "string" },
+        "descriptionHi": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "seoTitle": { "type": "string" },
+        "seoDescription": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slug", "name", "nameHi", "description", "imageUrl", "sortOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "ZARIFLY handcrafted boutique product with up to 5 square images.",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "categorySlug": { "type": "string" },
+        "slug": { "type": "string" },
+        "name": { "type": "string" },
+        "nameHi": { "type": "string" },
+        "sku": { "type": "string" },
+        "description": { "type": "string" },
+        "descriptionHi": { "type": "string" },
+        "fabric": { "type": "string" },
+        "workDetails": { "type": "string" },
+        "sellingPrice": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "discountPercent": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "isBestSeller": { "type": "boolean" },
+        "isNewArrival": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "seoTitle": { "type": "string" },
+        "seoDescription": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["categoryId", "slug", "name", "sku", "description", "fabric", "workDetails", "sellingPrice", "originalPrice", "isActive", "isBestSeller", "isNewArrival", "isFeatured", "images", "createdAt", "updatedAt"]
+    },
+    "ProductVariant": {
+      "title": "ProductVariant",
+      "description": "Colour and size variant for a ZARIFLY product.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "sku": { "type": "string" },
+        "colorName": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "sizeName": { "type": "string" },
+        "priceOverride": { "type": "number" },
+        "stockQuantity": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "sku", "colorName", "colorHex", "sizeName", "stockQuantity", "isActive", "createdAt", "updatedAt"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Stock ledger entry synced per product variant.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "sku": { "type": "string" },
+        "stockQuantity": { "type": "number" },
+        "lowStockThreshold": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "variantId", "sku", "stockQuantity", "lowStockThreshold", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order with shipping snapshot and totals.",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string", "format": "email" },
+        "customerPhone": { "type": "string" },
+        "shippingAddressJson": { "type": "object" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "couponCode": { "type": "string" },
+        "shippingFee": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "courierName": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "estimatedDelivery": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "customerName", "customerEmail", "customerPhone", "shippingAddressJson", "subtotal", "discountAmount", "shippingFee", "taxAmount", "grandTotal", "paymentMethod", "paymentStatus", "orderStatus", "createdAt", "updatedAt"]
+    },
+    "OrderTracking": {
+      "title": "OrderTracking",
+      "description": "Non-PII public order tracking summary indexed by orderNumber.",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "grandTotal": { "type": "number" },
+        "courierName": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "estimatedDelivery": { "type": "string" },
+        "cityState": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "orderStatus", "paymentStatus", "paymentMethod", "grandTotal", "createdAt", "updatedAt"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "Individual product line item belonging to an order.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "productName": { "type": "string" },
+        "sku": { "type": "string" },
+        "colorName": { "type": "string" },
+        "sizeName": { "type": "string" },
+        "unitPrice": { "type": "number" },
+        "quantity": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderNumber", "userId", "productId", "variantId", "productName", "sku", "colorName", "sizeName", "unitPrice", "quantity", "totalPrice", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment ledger record associated with an order.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "method": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "transactionRef": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderNumber", "userId", "method", "amount", "currency", "status", "createdAt", "updatedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer product review moderated by ZARIFLY admins.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "productSlug": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "rating": { "type": "number" },
+        "title": { "type": "string" },
+        "comment": { "type": "string" },
+        "imagesJson": { "type": "array", "items": { "type": "string" } },
+        "isVerifiedPurchase": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "userId", "customerName", "rating", "comment", "isVerifiedPurchase", "status", "createdAt", "updatedAt"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount coupon code.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "description": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percent", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "maxDiscount": { "type": "number" },
+        "usageLimit": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "expiresAt": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "description", "discountType", "discountValue", "minOrderAmount", "usedCount", "isActive", "createdAt", "updatedAt"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Homepage hero slider banner.",
+      "type": "object",
+      "properties": {
+        "heading": { "type": "string" },
+        "headingHi": { "type": "string" },
+        "subheading": { "type": "string" },
+        "subheadingHi": { "type": "string" },
+        "ctaText": { "type": "string" },
+        "ctaTextHi": { "type": "string" },
+        "ctaUrl": { "type": "string" },
+        "desktopImageUrl": { "type": "string" },
+        "mobileImageUrl": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["heading", "ctaText", "ctaUrl", "desktopImageUrl", "sortOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "Reel": {
+      "title": "Reel",
+      "description": "Shoppable fashion reel or short showcase clip.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "caption": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "productId": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "thumbnailUrl", "sortOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "Blog": {
+      "title": "Blog",
+      "description": "ZARIFLY Journal editorial blog post.",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string" },
+        "title": { "type": "string" },
+        "titleHi": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "excerptHi": { "type": "string" },
+        "content": { "type": "string" },
+        "contentHi": { "type": "string" },
+        "featuredImageUrl": { "type": "string" },
+        "authorName": { "type": "string" },
+        "category": { "type": "string" },
+        "seoTitle": { "type": "string" },
+        "seoDescription": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slug", "title", "excerpt", "content", "featuredImageUrl", "authorName", "category", "isPublished", "publishedAt", "createdAt", "updatedAt"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Customer newsletter subscription entry.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "source": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "source", "createdAt"]
+    },
+    "WebsiteSetting": {
+      "title": "WebsiteSetting",
+      "description": "Global storefront branding, announcement bar, founder photo, and social URLs.",
+      "type": "object",
+      "properties": {
+        "announcementEn": { "type": "string" },
+        "announcementHi": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "founderPortraitUrl": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "instagramUrl": { "type": "string" },
+        "facebookUrl": { "type": "string" },
+        "youtubeUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["announcementEn", "logoUrl", "founderPortraitUrl", "whatsappNumber", "supportEmail", "updatedAt"]
+    },
+    "ShippingSetting": {
+      "title": "ShippingSetting",
+      "description": "Shipping fee, free-shipping threshold, tax rate, and COD availability.",
+      "type": "object",
+      "properties": {
+        "freeShippingThreshold": { "type": "number" },
+        "flatShippingFee": { "type": "number" },
+        "taxRatePercent": { "type": "number" },
+        "codEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["freeShippingThreshold", "flatShippingFee", "taxRatePercent", "codEnabled", "updatedAt"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Customer inquiry submitted via Contact page.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "replied", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "subject", "message", "status", "createdAt"]
+    },
+    "AdminActivityLog": {
+      "title": "AdminActivityLog",
+      "description": "Immutable admin action audit trail.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "adminEmail", "action", "entityType", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Registered customer profiles keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/addresses/{addressId}": {
+      "schema": { "$ref": "#/entities/UserAddress" },
+      "description": "Saved delivery addresses per customer."
+    },
+    "/users/{userId}/wishlist/{productId}": {
+      "schema": { "$ref": "#/entities/WishlistItem" },
+      "description": "Saved wishlist items per customer."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized admin accounts keyed by Firebase Auth UID."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Boutique product catalog."
+    },
+    "/product_variants/{variantId}": {
+      "schema": { "$ref": "#/entities/ProductVariant" },
+      "description": "Product colour and size variants."
+    },
+    "/inventory/{inventoryId}": {
+      "schema": { "$ref": "#/entities/Inventory" },
+      "description": "Variant stock quantities and thresholds."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders with shipping snapshot."
+    },
+    "/order_tracking/{orderNumber}": {
+      "schema": { "$ref": "#/entities/OrderTracking" },
+      "description": "Non-PII order status mirror keyed by orderNumber."
+    },
+    "/order_items/{orderItemId}": {
+      "schema": { "$ref": "#/entities/OrderItem" },
+      "description": "Order line items."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Order payment records."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Customer product reviews."
+    },
+    "/coupons/{couponId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Active discount coupon codes."
+    },
+    "/banners/{bannerId}": {
+      "schema": { "$ref": "#/entities/Banner" },
+      "description": "Homepage slider banners."
+    },
+    "/reels/{reelId}": {
+      "schema": { "$ref": "#/entities/Reel" },
+      "description": "Shoppable lookbook reels."
+    },
+    "/blogs/{blogId}": {
+      "schema": { "$ref": "#/entities/Blog" },
+      "description": "ZARIFLY Journal blog posts."
+    },
+    "/newsletter_subscribers/{subscriberId}": {
+      "schema": { "$ref": "#/entities/NewsletterSubscriber" },
+      "description": "Newsletter signups."
+    },
+    "/website_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/WebsiteSetting" },
+      "description": "Storefront website settings."
+    },
+    "/shipping_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/ShippingSetting" },
+      "description": "Storefront shipping and tax configuration."
+    },
+    "/contact_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Customer contact inquiries."
+    },
+    "/admin_activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminActivityLog" },
+      "description": "Immutable admin audit log."
+    }
+  }
+}
