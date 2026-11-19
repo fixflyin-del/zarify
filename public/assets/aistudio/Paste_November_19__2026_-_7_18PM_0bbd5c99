@@ -1,0 +1,1124 @@
+# PROJECT: ZARIFLY – PREMIUM ISLAMIC FASHION E-COMMERCE WEB APPLICATION
+
+Act as a world-class UI/UX designer, senior full-stack developer, e-commerce architect, payment integration specialist, and SEO expert.
+
+Your task is to design and develop a complete, production-ready, premium e-commerce web application for **ZARIFLY**, a boutique Islamic fashion and hijab manufacturing brand.
+
+This is not a basic template website. Build a sophisticated, visually stunning, fully responsive, fast, secure, conversion-focused e-commerce platform with a complete backend, admin dashboard, product management, order management, payment gateway, image management, and bilingual support.
+
+IMPORTANT: Do not build just a frontend demo. All major features must work with real backend integration and persistent database storage.
+
+---
+
+# 1. BRAND IDENTITY
+
+Brand Name: ZARIFLY
+
+Brand Positioning:
+Premium Islamic Fashion | Boutique Hijabs | Luxury Modest Wear
+
+About the Brand:
+
+Zarifly is a premium Islamic fashion and boutique manufacturing brand specializing in beautifully crafted hijabs, naqaabs, dupattas, and modest fashion accessories.
+
+The brand focuses on traditional Indian craftsmanship combined with contemporary modest fashion.
+
+Our specialities include:
+
+- Fancy hijabs with Zari work.
+- Nakashi embroidery.
+- Zardozi embroidery.
+- Handcrafted hijabs.
+- Premium designer hijabs.
+- Elegant Islamic naqaabs.
+- Traditional and designer dupattas.
+- Premium modest fashion fabrics.
+
+Zarifly manufactures and sells products directly to B2C customers.
+
+Initially, the website will exclusively focus on:
+
+1. Hijabs
+2. Naqaabs
+3. Dupattas
+
+Do not introduce unrelated clothing categories in the initial version.
+
+Brand Personality:
+Elegant, premium, sophisticated, modest, feminine, traditional, trustworthy, and modern.
+
+# 2. BRAND OWNER AND SOCIAL MEDIA INTEGRATION
+
+Brand Founder / Owner: Sama Shaikh
+
+Sama Shaikh is also a social media influencer and the official face of the brand.
+
+Official social media profiles:
+
+Instagram:
+https://www.instagram.com/shama82541/?hl=en
+
+Facebook:
+https://www.facebook.com/profile.php?id=100091828008983
+
+YouTube:
+https://www.youtube.com/@ShamaShaikh-j1w
+
+Official Support WhatsApp:
++91 9619586126
+
+Email:
+info@zarifly.com
+
+Use the supplied Sama Shaikh portrait as the official founder/brand-face image. Do not substitute it with a stock model or AI-generated person.
+
+Use the supplied original Zarifly logo throughout the website.
+
+IMPORTANT BRANDING RULES:
+- Preserve the original Zarifly logo.
+- Do not redesign or distort the logo.
+- Use the original gold typography and bird symbol.
+- Maintain consistent branding across the website, checkout, footer, and admin login screen.
+
+Create an elegant Founder section on the homepage:
+
+"Meet the Founder – Sama Shaikh"
+
+Include her photograph, a short brand introduction, and social media links.
+
+Suggested introduction:
+
+"Zarifly is built with a passion for elegant modest fashion, traditional craftsmanship, and timeless beauty. Founded by Sama Shaikh, the brand brings together beautiful designs, intricate detailing, and the elegance of modest wear."
+
+Add an attractive "Explore Our Collection" CTA.
+
+# 3. DESIGN SYSTEM AND VISUAL DIRECTION
+
+Create an ultra-premium luxury boutique aesthetic.
+
+The website should look like a professionally designed international fashion brand.
+
+Color palette:
+
+- Primary: Champagne Gold
+- Secondary: Ivory / Warm White
+- Background: Soft Cream
+- Text: Deep Charcoal / Black
+- Accent: Muted Beige
+- Optional accent: Dark Chocolate Brown
+
+Avoid excessive bright colors.
+
+Design inspiration:
+Luxury fashion boutiques, premium hijab brands, designer clothing stores, and editorial fashion websites.
+
+Typography:
+- Elegant serif font for major headings.
+- Modern sans-serif font for body content.
+- Beautiful typography hierarchy.
+- Excellent readability on mobile devices.
+
+Design requirements:
+
+- Clean and spacious layouts.
+- Premium product cards.
+- Beautiful image galleries.
+- Smooth transitions.
+- Rounded or subtly styled UI elements.
+- Elegant hover effects.
+- Animated arrows and decorative dots.
+- Subtle background graphics.
+- Smooth scrolling.
+- Beautiful section separators.
+- Micro-interactions.
+- Loading animations.
+- Skeleton loading states.
+- Premium button animations.
+- Smooth carousel transitions.
+
+Use animation libraries such as Framer Motion where appropriate.
+
+Do not overuse animations. Maintain performance and accessibility.
+
+Avoid:
+- Generic e-commerce templates.
+- Excessive gradients.
+- Cluttered layouts.
+- Unnecessary popups.
+- Oversized text.
+- Cheap-looking buttons.
+- Random decorative elements.
+
+The final experience should feel like a premium boutique fashion brand.
+
+# 4. WEBSITE STRUCTURE AND SEO URLS
+
+Create individual pages with clean, descriptive, SEO-friendly URLs.
+
+Required pages:
+
+1. Home – /
+2. Shop All – /shop
+3. Hijabs – /collections/hijabs
+4. Naqaabs – /collections/naqaabs
+5. Dupattas – /collections/dupattas
+6. Product Details – /products/product-name
+7. About Us – /about-us
+8. Meet the Founder – /founder
+9. Contact Us – /contact-us
+10. My Account – /account
+11. Login / Register – /login
+12. Wishlist – /wishlist
+13. Shopping Cart – /cart
+14. Checkout – /checkout
+15. Order Confirmation – /order-confirmation
+16. Track Order – /track-order
+17. Blog – /blog
+18. Individual Blog – /blog/blog-title
+19. Privacy Policy – /privacy-policy
+20. Terms & Conditions – /terms-and-conditions
+21. Shipping Policy – /shipping-policy
+22. Return & Refund Policy – /return-refund-policy
+23. Cancellation Policy – /cancellation-policy
+24. FAQ – /faq
+
+Every page must have:
+- Unique SEO title.
+- Unique meta description.
+- Canonical URL.
+- Proper heading hierarchy.
+- Open Graph metadata.
+- SEO-friendly content.
+- Responsive design.
+
+Generate XML sitemap.xml and robots.txt.
+
+Implement structured data/schema markup for products, breadcrumbs, organization, and articles wherever appropriate.
+
+# 5. HOMEPAGE DESIGN
+
+The homepage must be visually impressive and conversion-focused.
+
+Create the following sections in this order:
+
+A. Announcement Bar
+
+A slim, elegant announcement bar at the top.
+
+Examples:
+"Discover the Art of Modest Elegance"
+"Premium Hijabs | Beautifully Crafted for You"
+
+Make announcement text manageable from the admin dashboard.
+
+B. Header / Navigation
+
+Create a premium sticky header.
+
+Include:
+- Zarifly logo.
+- Home.
+- Shop.
+- Hijabs.
+- Naqaabs.
+- Dupattas.
+- About Us.
+- Contact.
+- Language selector (English / हिन्दी).
+- Search icon.
+- Account icon.
+- Wishlist icon.
+- Shopping cart icon with live item count.
+
+Mobile navigation must be elegant and easy to use.
+
+C. Hero Banner Slider
+
+Create a beautiful full-width hero slider.
+
+Requirements:
+- Multiple banners.
+- Automatic sliding.
+- Manual arrow navigation.
+- Small pagination dots.
+- Smooth transition effects.
+- Mobile-specific responsive banners.
+- CTA buttons.
+- Admin-controlled banners.
+
+Use premium hijab fashion photography and realistic product imagery.
+
+Suggested banner text:
+
+"Elegance in Every Fold"
+
+"Discover the Beauty of Modest Fashion"
+
+CTA: SHOP COLLECTION
+
+D. Featured Categories
+
+Display three beautiful category cards:
+
+- Premium Hijabs
+- Elegant Naqaabs
+- Designer Dupattas
+
+Use large square or portrait product photography, subtle hover animations, and attractive category labels.
+
+E. Best Sellers
+
+Display best-selling products in a premium product grid.
+
+Each card should include:
+- Product image.
+- Product name.
+- Price.
+- Original price (if discounted).
+- Discount percentage.
+- Star rating based on actual reviews.
+- Wishlist button.
+- Quick View.
+- Add to Cart.
+
+F. Auto-Playing Instagram-Style Reels Section
+
+This is an important homepage feature.
+
+Create a visually engaging vertical video section inspired by Instagram Reels.
+
+Requirements:
+- Vertical 9:16 video format.
+- Multiple videos.
+- Smooth autoplay when visible.
+- Muted autoplay by default.
+- Loop playback.
+- Play/pause controls.
+- Sound toggle.
+- Swipe navigation on mobile.
+- Admin upload and management.
+- Video thumbnails.
+- Video loading optimization.
+
+Videos should automatically pause when outside the visible viewport.
+
+Allow videos to be managed from the admin panel.
+
+Do not autoplay sound.
+
+G. New Arrivals
+
+Display newly added hijabs, naqaabs, and dupattas.
+
+H. Craftsmanship / Our Speciality
+
+Create a visually rich section highlighting:
+
+- Zari Work.
+- Zardozi Work.
+- Nakashi.
+- Handcrafted Details.
+- Premium Fabrics.
+
+Use elegant icons, close-up product photographs, and animated decorative graphics.
+
+I. Founder Section – Sama Shaikh
+
+Make this section visually prominent.
+
+Use the supplied official founder photograph.
+
+Include:
+- Founder portrait.
+- Sama Shaikh's name.
+- Founder introduction.
+- Instagram, Facebook, and YouTube links.
+- Explore Collection CTA.
+
+The section should feel personal, authentic, and premium.
+
+J. Customer Reviews
+
+Display genuine customer reviews.
+
+Show:
+- Customer name.
+- Actual star rating.
+- Review text.
+- Product purchased.
+- Review date.
+- Customer-uploaded photographs if available.
+
+Never generate fake customer reviews.
+
+K. Instagram Social Section
+
+Display the brand's Instagram identity.
+
+Instagram:
+https://www.instagram.com/shama82541/?hl=en
+
+Include a "Follow Us on Instagram" CTA.
+
+Use the official Instagram API or an authorized integration if available. Otherwise use manually managed posts and linked Instagram content.
+
+L. Newsletter Subscription
+
+Create an elegant newsletter section.
+
+Text:
+"Be the First to Discover Something Beautiful."
+
+Allow customers to subscribe using their email address.
+
+Store subscriptions in the database and make them manageable from the admin panel.
+
+M. Footer
+
+Include:
+- Zarifly logo.
+- Brand description.
+- Shop categories.
+- About Us.
+- Contact Us.
+- FAQ.
+- Privacy Policy.
+- Terms & Conditions.
+- Shipping Policy.
+- Return & Refund Policy.
+- Social media links.
+- WhatsApp support.
+- Email address.
+- Copyright information.
+
+# 6. PRODUCT CATALOGUE AND PRODUCT DETAILS
+
+Build a complete dynamic product management system.
+
+Product categories:
+- Hijabs.
+- Naqaabs.
+- Dupattas.
+
+Every product must support FIVE square product images.
+
+Image specifications:
+- 1:1 aspect ratio.
+- High-resolution product photography.
+- Consistent image dimensions.
+- Zoom functionality.
+- Thumbnail gallery.
+- Main image viewer.
+- Smooth image switching.
+- Mobile swipe support.
+
+Product details page must contain:
+
+- Product name.
+- Product description.
+- Product SKU.
+- Selling price.
+- Original price.
+- Discount percentage.
+- Available colours.
+- Available sizes.
+- Fabric information.
+- Work / embroidery details.
+- Stock availability.
+- Quantity selector.
+- Add to Cart.
+- Buy Now.
+- Wishlist.
+- Delivery pincode checker.
+- Estimated delivery information.
+- Genuine customer reviews.
+- Related products.
+- Recently viewed products.
+
+PRODUCT VARIANTS:
+
+Hijabs must support:
+- Multiple colour variants.
+- Multiple size variants.
+
+Allow the admin to configure available colours and sizes separately for each product.
+
+When customers select a colour:
+- Update the product image if a colour-specific image exists.
+- Update availability.
+- Update SKU.
+- Update price if variant pricing is configured.
+
+When customers select a size:
+- Update availability.
+- Update SKU.
+- Update price if configured.
+
+Maintain separate inventory for individual variants.
+
+Do not allow customers to purchase out-of-stock variants.
+
+# 7. GENUINE CUSTOMER REVIEW SYSTEM
+
+Implement a real review and rating system.
+
+Requirements:
+- Only registered customers can submit reviews.
+- Prefer verified-purchase reviews.
+- Link reviews to actual orders and products.
+- One review per eligible purchased item unless editing is allowed.
+- Admin can moderate reviews.
+- Customers can upload review images.
+- Display actual rating distribution.
+- Calculate average ratings dynamically.
+
+Never create fake reviews or artificial ratings.
+
+Show "Verified Purchase" only when the purchase can be confirmed from an actual completed order.
+
+# 8. SHOPPING CART
+
+Build a fully functional shopping cart.
+
+Features:
+- Add product.
+- Remove product.
+- Change quantity.
+- Change product variant.
+- Update cart totals.
+- Discount calculation.
+- Coupon application.
+- Shipping calculation.
+- Grand total.
+- Persistent cart.
+
+The cart should remain available after page refresh and, for logged-in users, across sessions.
+
+# 9. CHECKOUT AND AUTOMATIC LOCATION DETECTION
+
+Create a modern, minimal, high-conversion checkout.
+
+Required customer fields:
+- Full name.
+- Mobile number.
+- Email.
+- House / Flat / Building.
+- Street / Area.
+- City.
+- State.
+- PIN code.
+- Landmark (optional).
+
+IMPORTANT AUTOMATIC LOCATION FEATURE:
+
+Implement browser-based geolocation with the customer's explicit permission.
+
+When the customer clicks "Detect My Location":
+
+1. Request browser location permission.
+2. Retrieve latitude and longitude.
+3. Use a reliable reverse-geocoding service.
+4. Automatically identify the available address fields.
+5. Automatically populate the checkout address.
+6. Resolve the correct PIN code whenever reliable data is available.
+
+Also implement PIN code lookup using a reliable Indian postal PIN code API.
+
+When a customer enters a PIN code:
+- Automatically identify city.
+- Identify district where available.
+- Identify state.
+- Check whether delivery is serviceable.
+- Display an estimated delivery period based on actual shipping rules.
+
+IMPORTANT:
+Geolocation and PIN code detection must not silently invent address details.
+
+If location permission is denied or the address is incomplete, provide a manual address-entry option.
+
+Always allow customers to verify and edit the detected address before placing an order.
+
+# 10. REAL PAYU PAYMENT GATEWAY INTEGRATION
+
+Integrate the official PayU India payment gateway.
+
+This must be a genuine production-capable integration, not a dummy payment button.
+
+Requirements:
+
+- PayU merchant configuration.
+- Secure payment initiation.
+- Backend-generated payment hash.
+- Correct payment request parameters.
+- Secure payment redirect.
+- Payment success callback.
+- Payment failure callback.
+- Server-side hash verification.
+- Server-side payment status verification.
+- Transaction ID storage.
+- Order ID mapping.
+- Payment logs.
+- Duplicate callback protection.
+- Idempotent order processing.
+- Failed payment handling.
+- Refund support through the appropriate PayU workflow.
+
+SECURITY REQUIREMENTS:
+
+Never expose:
+- PayU merchant salt.
+- Secret credentials.
+- Private API keys.
+- Payment verification secrets.
+
+Store credentials in secure environment variables.
+
+Never trust frontend payment success alone.
+
+Confirm payment through verified server-side responses or official PayU verification mechanisms before marking an order as paid.
+
+Provide a proper sandbox/testing mode and a separate production configuration.
+
+# 11. CLOUDINARY IMAGE AND VIDEO MANAGEMENT
+
+Integrate Cloudinary throughout the application.
+
+Cloudinary must be properly connected to both the frontend and backend/admin dashboard.
+
+Use Cloudinary for:
+- Product images.
+- Product variant images.
+- Founder photograph.
+- Homepage banners.
+- Category images.
+- Blog images.
+- Review photographs.
+- Reel videos.
+
+PRODUCT IMAGE UPLOAD SYSTEM:
+
+Every product must have an option to upload five images together.
+
+Requirements:
+
+- Multi-image selection.
+- Drag-and-drop upload.
+- Upload five images in one operation.
+- Image preview before saving.
+- Remove individual images.
+- Replace images.
+- Reorder images.
+- Display upload progress percentage.
+- Individual file progress.
+- Overall upload progress.
+- Success and failure status.
+- Retry failed uploads.
+- Proper validation of image type and file size.
+
+The admin must clearly see upload progress.
+
+Example:
+
+Uploading Product Images
+[████████████░░░░] 75%
+
+3 of 5 Images Uploaded
+
+Do not save incomplete product image records as a completed product gallery.
+
+Use secure Cloudinary upload signatures generated by the backend. Never expose Cloudinary API secrets on the frontend.
+
+Use optimized image delivery, responsive image transformations, and WebP/AVIF where supported.
+
+# 12. COMPLETE ADMIN DASHBOARD
+
+Create a separate, secure admin panel.
+
+Admin URL:
+ /admin
+
+Admin dashboard should have a premium, clean, modern interface.
+
+Dashboard overview:
+
+- Total Revenue.
+- Total Orders.
+- Pending Orders.
+- Completed Orders.
+- Cancelled Orders.
+- Total Customers.
+- Total Products.
+- Low Stock Products.
+- Best Selling Products.
+- Recent Orders.
+
+PRODUCT MANAGEMENT:
+
+Admin can:
+
+- Add products.
+- Edit products.
+- Delete products.
+- Activate/deactivate products.
+- Assign categories.
+- Add product descriptions.
+- Set selling price.
+- Set original price.
+- Configure discounts.
+- Add SKU.
+- Add five product images together.
+- Manage colours.
+- Manage sizes.
+- Manage variant-specific inventory.
+- Set stock quantities.
+- Manage product SEO.
+- Mark products as Best Sellers.
+- Mark products as New Arrivals.
+- Feature products on homepage.
+
+ORDER MANAGEMENT:
+
+- View all orders.
+- View order details.
+- Search orders.
+- Filter by date.
+- Filter by payment status.
+- Filter by order status.
+- Update order status.
+- Add tracking number.
+- Add courier details.
+- Cancel orders.
+- Process refunds through the appropriate workflow.
+- Print invoices.
+- Download order details.
+
+Order statuses:
+
+1. Pending.
+2. Confirmed.
+3. Processing.
+4. Shipped.
+5. Out for Delivery.
+6. Delivered.
+7. Cancelled.
+8. Return Requested.
+9. Returned.
+10. Refunded.
+
+CUSTOMER MANAGEMENT:
+
+- Customer list.
+- Customer details.
+- Order history.
+- Contact details.
+- Customer registration date.
+
+BANNER MANAGEMENT:
+
+- Upload banners.
+- Add banner heading.
+- Add description.
+- Configure CTA.
+- Set destination URL.
+- Reorder slides.
+- Activate/deactivate banners.
+
+REELS MANAGEMENT:
+
+- Upload videos.
+- Add thumbnails.
+- Add captions.
+- Set video order.
+- Activate/deactivate videos.
+- Delete videos.
+
+REVIEW MANAGEMENT:
+
+- View submitted reviews.
+- Approve/reject reviews.
+- Moderate customer images.
+- View verified purchase status.
+
+BLOG MANAGEMENT:
+
+- Create blogs.
+- Edit blogs.
+- Delete blogs.
+- Upload featured images.
+- Set SEO title.
+- Set meta description.
+- Set SEO slug.
+- Publish/unpublish posts.
+
+WEBSITE SETTINGS:
+
+- Logo.
+- Contact details.
+- WhatsApp number.
+- Email.
+- Social media links.
+- Announcement bar.
+- Homepage sections.
+- Shipping settings.
+- Tax settings.
+- Coupon management.
+- Policy content.
+- Language settings.
+
+ADMIN SECURITY:
+
+- Secure admin authentication.
+- Role-based access.
+- Password hashing.
+- Protected admin routes.
+- Session management.
+- Server-side authorization.
+- Admin activity logs.
+
+Never allow normal customers to access admin functionality.
+
+# 13. WHATSAPP SUPPORT
+
+Integrate WhatsApp support throughout the website.
+
+Official number:
++91 9619586126
+
+Use this WhatsApp destination:
+
+https://wa.me/919619586126
+
+Add a floating WhatsApp button on:
+- Homepage.
+- Product pages.
+- Cart.
+- Checkout.
+- Contact page.
+
+Add contextual prefilled messages where appropriate.
+
+Example:
+"Hello Zarifly, I need help with a product."
+
+Keep the button elegant and unobtrusive.
+
+# 14. ENGLISH AND HINDI LANGUAGE SYSTEM
+
+Implement complete bilingual functionality.
+
+Languages:
+- English.
+- Hindi (हिन्दी).
+
+Add a language selector in the website header.
+
+Requirements:
+
+- All navigation labels translated.
+- Product interface translated.
+- Buttons translated.
+- Checkout translated.
+- Validation messages translated.
+- Account pages translated.
+- Policy pages translated.
+- Blog interface translated.
+- Footer translated.
+- Error messages translated.
+
+Hindi must use proper Devanagari script.
+
+Do not translate brand names, product names, or SKUs automatically unless the admin explicitly provides translated versions.
+
+Save the selected language preference.
+
+Use a proper internationalization system rather than hardcoded conditional text throughout the application.
+
+Default language: English.
+
+# 15. BLOG AND CONTENT MANAGEMENT
+
+Create a complete blog system for SEO and organic traffic.
+
+Blog topics may include:
+
+- How to Choose the Perfect Hijab.
+- Different Types of Hijabs.
+- Hijab Styling Ideas.
+- Traditional Zardozi Work.
+- Zari Embroidery.
+- Modest Fashion Trends.
+- Dupatta Styling.
+- Naqaab Guide.
+- Hijab Care Tips.
+
+Each blog must have:
+
+- Unique SEO URL.
+- Title.
+- Description.
+- Featured image.
+- Main content.
+- Author.
+- Published date.
+- Related articles.
+- SEO metadata.
+- Social sharing.
+
+Blog content must be manageable through the admin panel.
+
+# 16. DATABASE AND BACKEND ARCHITECTURE
+
+Build a proper full-stack application with a reliable database.
+
+Create structured database entities for:
+
+- Users.
+- Admins.
+- Products.
+- Categories.
+- Product images.
+- Product variants.
+- Inventory.
+- Carts.
+- Cart items.
+- Orders.
+- Order items.
+- Payments.
+- Payment transactions.
+- Customers.
+- Addresses.
+- Reviews.
+- Coupons.
+- Banners.
+- Reels.
+- Blogs.
+- Newsletter subscribers.
+- Website settings.
+- Shipping information.
+
+Use proper database relationships, indexes, validation, and transaction handling.
+
+Avoid hardcoded product data in production.
+
+All website content and product data should come from the backend.
+
+Ensure inventory updates are transaction-safe to prevent overselling.
+
+# 17. RESPONSIVE DESIGN AND PERFORMANCE
+
+The website must be fully responsive.
+
+Optimize for:
+- Android mobile phones.
+- iPhones.
+- Tablets.
+- Laptops.
+- Desktop screens.
+
+Mobile-first design is essential because most customers are expected to browse through mobile devices.
+
+Performance requirements:
+
+- Lazy-load images.
+- Optimize images through Cloudinary.
+- Lazy-load videos.
+- Use responsive image sizes.
+- Minimize unnecessary JavaScript.
+- Avoid layout shifts.
+- Optimize fonts.
+- Implement caching where appropriate.
+- Use skeleton loading.
+- Optimize database queries.
+
+Aim for excellent Core Web Vitals and strong Google PageSpeed performance.
+
+# 18. SECURITY AND RELIABILITY
+
+Implement:
+
+- Input validation.
+- Server-side authorization.
+- Secure authentication.
+- Password hashing.
+- CSRF protection where applicable.
+- Rate limiting.
+- Secure session handling.
+- XSS protection.
+- SQL injection protection.
+- Secure API endpoints.
+- Environment variable management.
+- Payment verification.
+- Secure image upload handling.
+- Database backups.
+- Error logging.
+
+Do not store sensitive payment information unnecessarily.
+
+# 19. RECOMMENDED TECHNOLOGY STACK
+
+Use a modern, maintainable stack.
+
+Frontend:
+- Next.js.
+- React.
+- TypeScript.
+- Tailwind CSS.
+- Framer Motion.
+- Lucide Icons.
+
+Backend:
+- Next.js server-side APIs or a properly separated backend service.
+- Node.js.
+- TypeScript.
+
+Database:
+- PostgreSQL.
+- Prisma ORM.
+
+Image and Video:
+- Cloudinary.
+
+Payments:
+- Official PayU India integration.
+
+Authentication:
+- Secure session-based authentication.
+
+Deployment:
+- Vercel or another suitable production hosting platform.
+- Managed PostgreSQL database.
+
+Use stable, compatible package versions and proper environment configuration.
+
+If an existing project already has a working technology stack, inspect it before making changes. Do not unnecessarily replace working infrastructure.
+
+# 20. FINAL QUALITY REQUIREMENTS
+
+The finished application must satisfy the following:
+
+1. A visually premium homepage.
+2. Fully functional product catalogue.
+3. Five-image product galleries.
+4. Colour and size variants.
+5. Variant-level inventory.
+6. Genuine customer reviews.
+7. Functional shopping cart.
+8. Functional checkout.
+9. Automatic location detection with customer permission.
+10. Indian PIN code lookup.
+11. Real PayU payment integration.
+12. Secure Cloudinary integration.
+13. Five-image simultaneous upload.
+14. Upload progress indicators.
+15. Complete admin dashboard.
+16. Homepage hero slider.
+17. Autoplay muted reels.
+18. Founder section featuring Sama Shaikh.
+19. English and Hindi language support.
+20. Individual SEO-friendly URLs.
+21. Complete blog system.
+22. WhatsApp support.
+23. Responsive mobile design.
+24. Secure backend and database.
+25. Production deployment readiness.
+
+# 21. DEVELOPMENT EXECUTION INSTRUCTIONS
+
+Follow a systematic development process.
+
+PHASE 1: PROJECT INSPECTION AND ARCHITECTURE
+- Inspect the existing project.
+- Identify the current framework and dependencies.
+- Prepare the application architecture.
+- Plan the database schema.
+- Identify external integrations.
+
+PHASE 2: PREMIUM UI/UX
+- Build the complete design system.
+- Develop the homepage.
+- Develop all public pages.
+- Develop responsive navigation.
+- Implement animations and interactions.
+
+PHASE 3: BACKEND
+- Set up database.
+- Implement authentication.
+- Implement product APIs.
+- Implement category APIs.
+- Implement inventory.
+- Implement order management.
+- Implement review management.
+
+PHASE 4: ADMIN PANEL
+- Build all admin modules.
+- Connect admin modules to the actual database.
+- Implement product and media management.
+- Implement order and customer management.
+
+PHASE 5: INTEGRATIONS
+- Connect Cloudinary.
+- Integrate PayU.
+- Implement geolocation.
+- Implement PIN code lookup.
+- Implement WhatsApp.
+- Implement bilingual support.
+
+PHASE 6: TESTING
+Test all important workflows:
+
+- Customer registration.
+- Login.
+- Product browsing.
+- Variant selection.
+- Add to cart.
+- Cart updates.
+- Checkout validation.
+- Location detection.
+- PIN code lookup.
+- Payment success.
+- Payment failure.
+- Payment verification.
+- Order creation.
+- Inventory deduction.
+- Admin login.
+- Product creation.
+- Five-image upload.
+- Upload progress.
+- Banner management.
+- Reels management.
+- Review submission.
+- Hindi/English switching.
+- Mobile responsiveness.
+
+Never claim an integration is complete if it has only been visually implemented.
+
+If API credentials are unavailable, build the integration architecture, provide clear environment variable instructions, and mark the integration as awaiting credentials. Do not simulate real payment success.
+
+PHASE 7: PRODUCTION READINESS
+
+- Fix all build errors.
+- Fix all runtime errors.
+- Fix TypeScript errors.
+- Check API responses.
+- Check database connectivity.
+- Test critical user workflows.
+- Verify security.
+- Optimize performance.
+- Verify SEO metadata.
+- Prepare deployment documentation.
+
+Do not leave non-functional buttons, dummy APIs, fake data presented as real, or unfinished placeholder pages.
+
+Do not stop after creating the homepage.
+
+The entire application must be developed as one cohesive, working e-commerce platform.
+
+FINAL OBJECTIVE:
+
+Build ZARIFLY into a premium, elegant, trustworthy, and fully functional Islamic fashion e-commerce brand.
+
+The shopping experience should communicate luxury, craftsmanship, modesty, and authenticity.
+
+Every visual element, interaction, product page, and checkout step must reflect the quality of a premium boutique fashion brand.
+
+Prioritize excellent design, real functionality, secure integrations, and long-term scalability.

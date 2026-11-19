@@ -1,0 +1,6 @@
+{
+  "name": "ZARIFLY — Luxury Islamic Fashion & Boutique Hijabs",
+  "description": "ZARIFLY is a luxury boutique Islamic fashion brand founded by Sama Shaikh, specializing in handcrafted Zari, Zardozi, and Nakashi hijabs, elegant naqaabs, and designer dupattas.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

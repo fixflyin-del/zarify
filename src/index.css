@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --zarifly-pink: #FF4D8D;
+    --zarifly-violet: #7C3AED;
+    --zarifly-aqua: #06B6D4;
+    --zarifly-peach: #FF7A59;
+    --zarifly-pink-soft: #FFF0F6;
+    --zarifly-violet-soft: #F3EEFF;
+    --zarifly-aqua-soft: #ECFEFF;
+    --zarifly-peach-soft: #FFF4F0;
+    --zarifly-bg: #FAFAFF;
+    --zarifly-ink: #181326;
+    --zarifly-white: #FFFFFF;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--zarifly-bg);
+    color: var(--zarifly-ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overflow-x: hidden;
+    background-color: var(--zarifly-bg);
+    color: var(--zarifly-ink);
+  }
+
+  h1, h2, h3, .font-serif-display {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .font-editorial {
+    font-family: 'Cormorant Garamond', 'Noto Sans Devanagari', Georgia, serif;
+  }
+
+  button, a {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--zarifly-violet);
+    outline-offset: 2px;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
