@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Share2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { apiRequest } from '../lib/api';
+import { fetchPublishedBlogs } from '../lib/firestoreStore';
 import { DEFAULT_BLOGS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import type { BlogPost } from '../types';
@@ -13,8 +13,8 @@ export function BlogListPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiRequest<{ blogs: BlogPost[] }>('/api/blogs')
-      .then((res) => setPosts(res.blogs?.length ? res.blogs : DEFAULT_BLOGS))
+    fetchPublishedBlogs()
+      .then((blogs) => setPosts(blogs.length ? blogs : DEFAULT_BLOGS))
       .catch(() => setPosts(DEFAULT_BLOGS))
       .finally(() => setLoading(false));
   }, []);
@@ -110,10 +110,12 @@ export function BlogDetailPage() {
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    apiRequest<{ blog: BlogPost; related: BlogPost[] }>(`/api/blogs/${slug}`)
-      .then((res) => {
-        setPost(res.blog);
-        setRelated(res.related || []);
+    fetchPublishedBlogs()
+      .then((blogs) => {
+        const list = blogs.length ? blogs : DEFAULT_BLOGS;
+        const found = list.find((b) => b.slug === slug) || null;
+        setPost(found);
+        setRelated(found ? list.filter((b) => b.id !== found.id).slice(0, 3) : []);
       })
       .catch(() => {
         const fallback = DEFAULT_BLOGS.find((b) => b.slug === slug) || null;

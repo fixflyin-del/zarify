@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { apiRequest } from '../lib/api';
+import { fetchAllProductsEnriched } from '../lib/firestoreStore';
 import { DEFAULT_PRODUCTS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
@@ -30,44 +30,43 @@ export function ShopPage({ collectionSlug }: ShopPageProps) {
     const load = async () => {
       try {
         setLoading(true);
-        const qs = new URLSearchParams();
-        if (activeCategory && activeCategory !== 'all') qs.set('category', activeCategory);
-        if (search) qs.set('search', search);
-        if (sort) qs.set('sort', sort);
-        if (maxPrice) qs.set('maxPrice', maxPrice);
-        if (searchParams.get('newArrival') === 'true') qs.set('newArrival', 'true');
+        const { products: allProducts } = await fetchAllProductsEnriched({
+          includeInactive: false,
+          includeAllReviews: false,
+        });
+        if (!active) return;
 
-        const data = await apiRequest<{ products: Product[] }>(`/api/products?${qs.toString()}`);
-        if (active) setProducts(data.products || []);
-      } catch (err) {
-        console.error('Shop load error (using default catalog):', err);
-        if (active) {
-          let fallback = [...DEFAULT_PRODUCTS];
-          if (activeCategory && activeCategory !== 'all') {
-            fallback = fallback.filter((p) => p.category?.slug === activeCategory);
-          }
-          if (search) {
-            const q = search.toLowerCase();
-            fallback = fallback.filter(
-              (p) =>
-                p.name.toLowerCase().includes(q) ||
-                p.description.toLowerCase().includes(q) ||
-                p.fabric.toLowerCase().includes(q)
-            );
-          }
-          if (maxPrice && !Number.isNaN(Number(maxPrice))) {
-            fallback = fallback.filter((p) => p.sellingPrice <= Number(maxPrice));
-          }
-          if (searchParams.get('newArrival') === 'true') {
-            fallback = fallback.filter((p) => p.isNewArrival);
-          }
-          if (sort === 'price_asc') fallback.sort((a, b) => a.sellingPrice - b.sellingPrice);
-          else if (sort === 'price_desc') fallback.sort((a, b) => b.sellingPrice - a.sellingPrice);
-          else if (sort === 'bestselling') {
-            fallback.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
-          }
-          setProducts(fallback);
+        let list = [...(allProducts.length ? allProducts : DEFAULT_PRODUCTS)];
+        if (activeCategory && activeCategory !== 'all') {
+          list = list.filter(
+            (p) => p.category?.slug === activeCategory || p.categorySlug === activeCategory
+          );
         }
+        if (search) {
+          const q = search.toLowerCase();
+          list = list.filter(
+            (p) =>
+              p.name.toLowerCase().includes(q) ||
+              (p.nameHi || '').toLowerCase().includes(q) ||
+              p.description.toLowerCase().includes(q) ||
+              p.fabric.toLowerCase().includes(q)
+          );
+        }
+        if (maxPrice && !Number.isNaN(Number(maxPrice))) {
+          list = list.filter((p) => p.sellingPrice <= Number(maxPrice));
+        }
+        if (searchParams.get('newArrival') === 'true') {
+          list = list.filter((p) => p.isNewArrival);
+        }
+        if (sort === 'price_asc') list.sort((a, b) => a.sellingPrice - b.sellingPrice);
+        else if (sort === 'price_desc') list.sort((a, b) => b.sellingPrice - a.sellingPrice);
+        else if (sort === 'bestselling') {
+          list.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
+        }
+        setProducts(list);
+      } catch (err) {
+        console.error('Shop Firestore load error:', err);
+        if (active) setProducts(DEFAULT_PRODUCTS);
       } finally {
         if (active) setLoading(false);
       }

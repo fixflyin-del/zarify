@@ -68,8 +68,10 @@ export function ProductCard({ product, index = 0 }: { product: Product; index?: 
       ? product.category.nameHi
       : product.category?.name || '';
 
-  const tintClass = CARD_TINTS[(product.id + index) % CARD_TINTS.length];
-  const badgeGrad = BADGE_GRADIENTS[(product.id + index) % BADGE_GRADIENTS.length];
+  const idHash =
+    product.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) + index;
+  const tintClass = CARD_TINTS[idHash % CARD_TINTS.length];
+  const badgeGrad = BADGE_GRADIENTS[idHash % BADGE_GRADIENTS.length];
 
   return (
     <motion.article

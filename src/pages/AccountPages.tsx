@@ -1,22 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, LogOut, Package, Shield, User as UserIcon } from 'lucide-react';
+import { updateProfile } from 'firebase/auth';
+import { Heart, KeyRound, LogOut, Package, Shield, User as UserIcon } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { apiRequest, formatINR } from '../lib/api';
+import { auth } from '../lib/firebase';
+import { formatINR } from '../lib/api';
+import { fetchMyOrders, updateUserProfileDoc } from '../lib/firestoreStore';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
 import { ZariflyLogo } from '../components/ZariflyLogo';
 import type { Order, Product } from '../types';
 
 export function LoginPage() {
-  const { user, loginWithEmail, registerWithEmail, loginWithGoogle, t, notify } = useStore();
+  const {
+    user,
+    loginWithEmail,
+    registerWithEmail,
+    sendPasswordReset,
+    loginWithGoogle,
+    t,
+    notify,
+  } = useStore();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -28,6 +40,12 @@ export function LoginPage() {
     e.preventDefault();
     try {
       setLoading(true);
+      if (mode === 'reset') {
+        await sendPasswordReset(email);
+        setResetSent(true);
+        notify('Password reset link sent to your email.', 'success');
+        return;
+      }
       const u =
         mode === 'login'
           ? await loginWithEmail(email, password)
@@ -61,7 +79,7 @@ export function LoginPage() {
     <>
       <SEO
         title="Sign In or Create Account | ZARIFLY Boutique"
-        description="Sign in to your ZARIFLY boutique account to manage orders, wishlist, saved addresses, and genuine product reviews."
+        description="Sign in to your ZARIFLY boutique account with Firebase Authentication to manage orders, wishlist, saved addresses, and genuine product reviews."
         canonicalPath="/login"
       />
 
@@ -72,120 +90,179 @@ export function LoginPage() {
               <ZariflyLogo size="lg" />
             </div>
             <h1 className="font-serif-display text-3xl font-extrabold text-[#181326]">
-              {mode === 'login' ? t('auth.signIn') : t('auth.register')}
+              {mode === 'login'
+                ? t('auth.signIn')
+                : mode === 'register'
+                  ? t('auth.register')
+                  : 'Reset Password'}
             </h1>
           </div>
 
-          <div className="grid grid-cols-2 rounded-full bg-[#FAFAFF] border border-[#E2D9F3] p-1 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className={`py-2.5 rounded-full transition-all ${
-                mode === 'login'
-                  ? 'bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white shadow-sm'
-                  : 'text-[#64597A]'
-              }`}
-            >
-              {t('auth.signIn')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('register')}
-              className={`py-2.5 rounded-full transition-all ${
-                mode === 'register'
-                  ? 'bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white shadow-sm'
-                  : 'text-[#64597A]'
-              }`}
-            >
-              {t('auth.register')}
-            </button>
-          </div>
+          {mode !== 'reset' && (
+            <>
+              <div className="grid grid-cols-2 rounded-full bg-[#FAFAFF] border border-[#E2D9F3] p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setResetSent(false);
+                  }}
+                  className={`py-2.5 rounded-full transition-all cursor-pointer ${
+                    mode === 'login'
+                      ? 'bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white shadow-sm'
+                      : 'text-[#64597A]'
+                  }`}
+                >
+                  {t('auth.signIn')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setResetSent(false);
+                  }}
+                  className={`py-2.5 rounded-full transition-all cursor-pointer ${
+                    mode === 'register'
+                      ? 'bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white shadow-sm'
+                      : 'text-[#64597A]'
+                  }`}
+                >
+                  {t('auth.register')}
+                </button>
+              </div>
 
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleGoogle}
-            className="w-full py-3.5 px-4 rounded-full border-2 border-[#181326] bg-white text-[#181326] text-xs font-extrabold tracking-wider uppercase hover:bg-[#F3EEFF] hover:border-[#7C3AED] transition-colors flex items-center justify-center gap-2.5"
-          >
-            <span>{t('auth.googleSignIn')}</span>
-          </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleGoogle}
+                className="w-full py-3.5 px-4 rounded-full border-2 border-[#181326] bg-white text-[#181326] text-xs font-extrabold tracking-wider uppercase hover:bg-[#F3EEFF] hover:border-[#7C3AED] transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <span>{t('auth.googleSignIn')}</span>
+              </button>
 
-          <div className="relative flex items-center py-1">
-            <div className="flex-grow border-t border-[#EDE8F7]" />
-            <span className="shrink mx-3 text-[11px] text-[#8B7FA6] uppercase font-bold">
-              or email
-            </span>
-            <div className="flex-grow border-t border-[#EDE8F7]" />
-          </div>
+              <div className="relative flex items-center py-1">
+                <div className="flex-grow border-t border-[#EDE8F7]" />
+                <span className="shrink mx-3 text-[11px] text-[#8B7FA6] uppercase font-bold">
+                  or email
+                </span>
+                <div className="flex-grow border-t border-[#EDE8F7]" />
+              </div>
+            </>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <>
+          {mode === 'reset' && resetSent ? (
+            <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-3">
+              <KeyRound className="w-8 h-8 text-emerald-600 mx-auto" />
+              <p className="text-sm font-semibold text-[#181326]">Password Reset Email Sent</p>
+              <p className="text-xs text-[#5E5474]">
+                Check <strong>{email}</strong> for a Firebase password reset link, then sign in with your new password.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setResetSent(false);
+                }}
+                className="px-6 py-2.5 rounded-full bg-[#181326] text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Back to Sign In
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {mode === 'register' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                      {t('auth.fullName')}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                      {t('auth.phone')}
+                    </label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                  {t('auth.email')}
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              {mode !== 'reset' && (
                 <div>
-                  <label className="block text-xs font-bold text-[#5E5474] mb-1">
-                    {t('auth.fullName')}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[#5E5474]">
+                      {t('auth.password')}
+                    </label>
+                    {mode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => setMode('reset')}
+                        className="text-[11px] font-bold text-[#7C3AED] hover:text-[#FF4D8D] cursor-pointer"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
                   <input
-                    type="text"
+                    type="password"
                     required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className={inputClass}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#5E5474] mb-1">
-                    {t('auth.phone')}
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              </>
-            )}
+              )}
 
-            <div>
-              <label className="block text-xs font-bold text-[#5E5474] mb-1">
-                {t('auth.email')}
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={inputClass}
-              />
-            </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 rounded-full bg-gradient-to-r from-[#FF4D8D] via-[#EC4899] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-[0.14em] hover:brightness-110 transition-all disabled:opacity-50 shadow-[0_10px_24px_rgba(255,77,141,0.3)] cursor-pointer"
+              >
+                {loading
+                  ? t('common.loading')
+                  : mode === 'login'
+                    ? t('auth.signIn')
+                    : mode === 'register'
+                      ? t('auth.register')
+                      : 'Send Password Reset Link'}
+              </button>
 
-            <div>
-              <label className="block text-xs font-bold text-[#5E5474] mb-1">
-                {t('auth.password')}
-              </label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 rounded-full bg-gradient-to-r from-[#FF4D8D] via-[#EC4899] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-[0.14em] hover:brightness-110 transition-all disabled:opacity-50 shadow-[0_10px_24px_rgba(255,77,141,0.3)]"
-            >
-              {loading
-                ? t('common.loading')
-                : mode === 'login'
-                  ? t('auth.signIn')
-                  : t('auth.register')}
-            </button>
-          </form>
+              {mode === 'reset' && (
+                <button
+                  type="button"
+                  onClick={() => setMode('login')}
+                  className="w-full text-xs font-bold text-[#64597A] hover:text-[#181326] py-1 cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              )}
+            </form>
+          )}
         </div>
       </div>
     </>
@@ -193,7 +270,7 @@ export function LoginPage() {
 }
 
 export function AccountPage() {
-  const { user, authLoading, logout, refreshAuth, t, notify } = useStore();
+  const { user, authLoading, lang, logout, refreshAuth, t, notify } = useStore();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [fullName, setFullName] = useState('');
@@ -210,20 +287,25 @@ export function AccountPage() {
     if (user) {
       setFullName(user.fullName || '');
       setPhone(user.phone || '');
-      apiRequest<{ orders: Order[] }>('/api/orders/my')
-        .then((res) => setOrders(res.orders || []))
+      fetchMyOrders(user.uid)
+        .then((res) => setOrders(res))
         .catch(() => {});
     }
   }, [user]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     try {
       setSaving(true);
-      await apiRequest('/api/auth/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({ fullName, phone }),
+      await updateUserProfileDoc(user.uid, {
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        preferredLang: lang,
       });
+      if (auth.currentUser && fullName.trim()) {
+        await updateProfile(auth.currentUser, { displayName: fullName.trim() }).catch(() => {});
+      }
       await refreshAuth();
       notify('Profile updated.', 'success');
     } catch (err: any) {
@@ -268,7 +350,7 @@ export function AccountPage() {
             <button
               type="button"
               onClick={() => logout().then(() => navigate('/'))}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#181326] hover:text-white transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#181326] hover:text-white transition-colors cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               {t('auth.logout')}
@@ -311,7 +393,7 @@ export function AccountPage() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-wider hover:brightness-110 transition-all"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-wider hover:brightness-110 transition-all cursor-pointer"
             >
               {saving ? t('common.loading') : t('common.save')}
             </button>
@@ -380,20 +462,10 @@ export function AccountPage() {
 }
 
 export function WishlistPage() {
-  const { user, t } = useStore();
-  const [items, setItems] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    apiRequest<{ items: Product[] }>('/api/wishlist')
-      .then((res) => setItems(res.items || []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
-  }, [user]);
+  const { user, wishlistIds, bootstrap, bootstrapLoading, t } = useStore();
+  const items: Product[] = (bootstrap?.allProducts || []).filter((p) =>
+    wishlistIds.includes(p.id)
+  );
 
   return (
     <>
@@ -428,7 +500,7 @@ export function WishlistPage() {
               {t('auth.signIn')}
             </Link>
           </div>
-        ) : loading ? (
+        ) : bootstrapLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {[1, 2, 3, 4].map((n) => (
               <div key={n} className="aspect-[3/4] rounded-[24px] bg-white animate-pulse" />

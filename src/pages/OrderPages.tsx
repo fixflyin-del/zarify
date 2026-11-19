@@ -1,20 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Package, Printer, Search, Truck } from 'lucide-react';
-import { apiRequest, formatINR } from '../lib/api';
+import { AlertTriangle, CheckCircle2, Printer, Search, Truck } from 'lucide-react';
+import { formatINR } from '../lib/api';
+import { fetchOrderByNumberForUser, trackOrderPublic } from '../lib/firestoreStore';
+import { useStore } from '../context/StoreContext';
 import { SEO } from '../components/SEO';
-import type { Order } from '../types';
+import type { Order, OrderTrackingSummary } from '../types';
 
-const STATUS_STEPS = [
-  'pending',
-  'confirmed',
-  'processing',
-  'shipped',
-  'out_for_delivery',
-  'delivered',
-];
+const STATUS_STEPS = ['placed', 'confirmed', 'packed', 'shipped', 'delivered'];
 
 export function OrderConfirmationPage() {
+  const { user } = useStore();
   const [searchParams] = useSearchParams();
   const orderNumber = searchParams.get('order') || '';
   const paymentFlag = searchParams.get('payment') || '';
@@ -26,16 +22,13 @@ export function OrderConfirmationPage() {
       setLoading(false);
       return;
     }
-    apiRequest<{ order: Order }>(`/api/orders/${encodeURIComponent(orderNumber)}`)
-      .then((res) => setOrder(res.order))
+    fetchOrderByNumberForUser(orderNumber)
+      .then((res) => setOrder(res))
       .catch(() => setOrder(null))
       .finally(() => setLoading(false));
-  }, [orderNumber]);
+  }, [orderNumber, user?.uid]);
 
-  const isFailed =
-    paymentFlag === 'failed' ||
-    paymentFlag === 'verification_failed' ||
-    order?.paymentStatus === 'failed';
+  const isFailed = paymentFlag === 'failed' || order?.paymentStatus === 'failed';
 
   return (
     <>
@@ -54,7 +47,7 @@ export function OrderConfirmationPage() {
               Order Receipt Unavailable
             </h1>
             <p className="text-sm text-[#64597A]">
-              We could not locate that order reference. Use Track Order with your order number to check status.
+              Please sign in with the account used to place this order, or check status in Track Order.
             </p>
             <Link
               to="/track-order"
@@ -79,14 +72,11 @@ export function OrderConfirmationPage() {
                 Order #{order.orderNumber}
               </p>
               <h1 className="font-serif-display text-3xl sm:text-4xl font-extrabold text-[#181326]">
-                {isFailed
-                  ? 'Payment Was Not Completed'
-                  : 'Thank You — Your Order Is Confirmed'}
+                {isFailed ? 'Payment Was Not Completed' : 'Thank You — Your Order Is Confirmed'}
               </h1>
               <p className="text-sm text-[#64597A] max-w-md mx-auto">
-                {isFailed
-                  ? 'Your payment could not be verified by PayU. Reserved inventory has been restored. You may retry from your bag or contact our WhatsApp concierge.'
-                  : `Preparing shipment for ${order.customerName}. Estimated delivery: ${order.estimatedDelivery || '3–5 Business Days'}.`}
+                Preparing shipment for {order.customerName}. Estimated delivery:{' '}
+                {order.estimatedDelivery || '4–6 business days'}.
               </p>
             </div>
 
@@ -110,8 +100,7 @@ export function OrderConfirmationPage() {
                   Payment &amp; Status
                 </p>
                 <p>
-                  Method:{' '}
-                  <strong className="text-[#181326] uppercase">{order.paymentMethod}</strong>
+                  Method: <strong className="text-[#181326] uppercase">{order.paymentMethod}</strong>
                 </p>
                 <p>
                   Payment Status:{' '}
@@ -175,7 +164,7 @@ export function OrderConfirmationPage() {
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#F3EEFF] transition-colors"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#F3EEFF] transition-colors cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 Print Invoice
@@ -204,22 +193,23 @@ export function OrderConfirmationPage() {
 
 export function TrackOrderPage() {
   const [orderNumber, setOrderNumber] = useState('');
-  const [contact, setContact] = useState('');
-  const [order, setOrder] = useState<Order | null>(null);
+  const [tracking, setTracking] = useState<OrderTrackingSummary | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setOrder(null);
+    setTracking(null);
     if (!orderNumber.trim()) return;
     try {
       setLoading(true);
-      const qs = new URLSearchParams({ orderNumber: orderNumber.trim() });
-      if (contact.trim()) qs.set('contact', contact.trim());
-      const res = await apiRequest<{ order: Order }>(`/api/orders/track?${qs.toString()}`);
-      setOrder(res.order);
+      const res = await trackOrderPublic(orderNumber.trim());
+      if (!res) {
+        setError('Order not found. Please double-check your ZARIFLY order number (e.g. ZRF-XXXXXX-XXX).');
+      } else {
+        setTracking(res);
+      }
     } catch (err: any) {
       setError(err?.message || 'Unable to locate this order.');
     } finally {
@@ -227,7 +217,7 @@ export function TrackOrderPage() {
     }
   };
 
-  const activeStepIdx = order ? STATUS_STEPS.indexOf(order.orderStatus) : -1;
+  const activeStepIdx = tracking ? STATUS_STEPS.indexOf(tracking.orderStatus) : -1;
 
   return (
     <>
@@ -246,13 +236,13 @@ export function TrackOrderPage() {
             Track Your Order
           </h1>
           <p className="text-sm text-[#64597A]">
-            Enter your ZARIFLY order number (e.g. ZRF-2026-XXXXXX) to check dispatch and courier updates.
+            Enter your ZARIFLY order number (e.g. ZRF-123456-789) to view live dispatch status.
           </p>
         </div>
 
         <form
           onSubmit={handleTrack}
-          className="bg-white rounded-[30px] border border-[#EDE8F7] p-6 sm:p-8 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-[0_12px_36px_rgba(124,58,237,0.06)]"
+          className="bg-white rounded-[30px] border border-[#EDE8F7] p-6 sm:p-8 flex flex-col sm:flex-row gap-4 shadow-[0_12px_36px_rgba(124,58,237,0.06)]"
         >
           <input
             type="text"
@@ -260,19 +250,12 @@ export function TrackOrderPage() {
             value={orderNumber}
             onChange={(e) => setOrderNumber(e.target.value.toUpperCase())}
             placeholder="Order Number (ZRF-...)"
-            className="px-4 py-3 rounded-full text-sm bg-[#FAFAFF] border border-[#E2D9F3] outline-none focus:border-[#7C3AED]"
-          />
-          <input
-            type="text"
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            placeholder="Email or Mobile (optional)"
-            className="px-4 py-3 rounded-full text-sm bg-[#FAFAFF] border border-[#E2D9F3] outline-none focus:border-[#7C3AED]"
+            className="flex-1 px-5 py-3.5 rounded-full text-sm bg-[#FAFAFF] border border-[#E2D9F3] outline-none focus:border-[#7C3AED]"
           />
           <button
             type="submit"
             disabled={loading}
-            className="py-3 px-6 rounded-full bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-[0.14em] hover:brightness-110 transition-all inline-flex items-center justify-center gap-2 shadow-md"
+            className="py-3.5 px-8 rounded-full bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] text-white text-xs font-extrabold uppercase tracking-[0.14em] hover:brightness-110 transition-all inline-flex items-center justify-center gap-2 shadow-md cursor-pointer"
           >
             <Search className="w-4 h-4" />
             <span>{loading ? 'Searching...' : 'Track Order'}</span>
@@ -285,32 +268,36 @@ export function TrackOrderPage() {
           </div>
         )}
 
-        {order && (
+        {tracking && (
           <div className="bg-white rounded-[30px] border border-[#EDE8F7] p-6 sm:p-8 space-y-6 shadow-[0_12px_36px_rgba(124,58,237,0.06)]">
             <div className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-[#EDE8F7]">
               <div>
                 <p className="text-xs font-extrabold text-[#7C3AED] tabular-nums">
-                  Order #{order.orderNumber}
+                  Order #{tracking.orderNumber}
                 </p>
                 <h2 className="font-serif-display text-2xl sm:text-3xl font-extrabold text-[#181326] capitalize mt-0.5">
-                  Status: {order.orderStatus.replace(/_/g, ' ')}
+                  Status: {tracking.orderStatus.replace(/_/g, ' ')}
                 </h2>
+                {tracking.cityState && (
+                  <p className="text-xs text-[#64597A] mt-1">Destination: {tracking.cityState}</p>
+                )}
               </div>
               <div className="text-right text-xs text-[#64597A]">
                 <p>
                   Total:{' '}
                   <strong className="text-[#181326] tabular-nums">
-                    {formatINR(order.grandTotal)}
+                    {formatINR(tracking.grandTotal)}
                   </strong>
                 </p>
                 <p className="capitalize">
-                  Payment: {order.paymentMethod} ({order.paymentStatus})
+                  Payment: {tracking.paymentMethod} ({tracking.paymentStatus})
                 </p>
+                <p>Placed: {new Date(tracking.createdAt).toLocaleDateString('en-IN')}</p>
               </div>
             </div>
 
             {activeStepIdx >= 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
                 {STATUS_STEPS.map((step, i) => {
                   const done = i <= activeStepIdx;
                   return (
@@ -329,37 +316,24 @@ export function TrackOrderPage() {
               </div>
             )}
 
-            {(order.courierName || order.trackingNumber) && (
+            {(tracking.courierName || tracking.trackingNumber || tracking.estimatedDelivery) && (
               <div className="rounded-2xl bg-[#ECFEFF]/75 border border-[#06B6D4]/35 p-4 text-xs flex flex-wrap items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 font-bold text-[#181326]">
                   <Truck className="w-4 h-4 text-[#06B6D4]" />
-                  Courier: {order.courierName || 'Assigned'}
+                  Courier: {tracking.courierName || 'ZARIFLY Express Partner'}
                 </span>
-                <span className="tabular-nums text-[#5E5474]">
-                  Tracking ID: <strong className="text-[#181326]">{order.trackingNumber}</strong>
-                </span>
+                {tracking.trackingNumber && (
+                  <span className="tabular-nums text-[#5E5474]">
+                    Tracking ID: <strong className="text-[#181326]">{tracking.trackingNumber}</strong>
+                  </span>
+                )}
+                {tracking.estimatedDelivery && (
+                  <span className="text-[#5E5474]">
+                    ETA: <strong className="text-[#181326]">{tracking.estimatedDelivery}</strong>
+                  </span>
+                )}
               </div>
             )}
-
-            <div className="space-y-2 pt-2">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#64597A] flex items-center gap-2">
-                <Package className="w-4 h-4 text-[#7C3AED]" />
-                Items in Shipment
-              </h3>
-              {(order.items || []).map((item) => (
-                <div
-                  key={item.id}
-                  className="flex justify-between text-sm py-2.5 border-b border-[#EDE8F7]"
-                >
-                  <span className="text-[#181326]">
-                    {item.productName} ({item.colorName} · {item.sizeName}) × {item.quantity}
-                  </span>
-                  <span className="tabular-nums font-extrabold text-[#181326]">
-                    {formatINR(item.totalPrice)}
-                  </span>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>

@@ -1,29 +1,4 @@
-const CART_SESSION_KEY = 'zarifly_cart_session';
-const AUTH_TOKEN_KEY = 'zarifly_auth_token';
-
-let inMemoryAuthToken: string | null =
-  typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_KEY) : null;
-
-export function setAuthToken(token: string | null) {
-  inMemoryAuthToken = token;
-  if (typeof window !== 'undefined') {
-    if (token) {
-      window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-    } else {
-      window.localStorage.removeItem(AUTH_TOKEN_KEY);
-    }
-  }
-}
-
-export function getCartSessionId(): string {
-  if (typeof window === 'undefined') return '';
-  let sid = window.localStorage.getItem(CART_SESSION_KEY);
-  if (!sid) {
-    sid = `zrf-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    window.localStorage.setItem(CART_SESSION_KEY, sid);
-  }
-  return sid;
-}
+import { auth } from './firebase';
 
 export async function apiRequest<T = any>(
   url: string,
@@ -33,15 +8,17 @@ export async function apiRequest<T = any>(
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
-  const sid = getCartSessionId();
-  if (sid) {
-    headers.set('x-cart-session', sid);
-  }
-  const activeToken =
-    inMemoryAuthToken ||
-    (typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_TOKEN_KEY) : null);
-  if (activeToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${activeToken}`);
+
+  // Attach Firebase Authentication ID token when a user is signed in
+  if (!headers.has('Authorization') && auth.currentUser) {
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      if (idToken) {
+        headers.set('Authorization', `Bearer ${idToken}`);
+      }
+    } catch {
+      // Proceed without token if unavailable
+    }
   }
 
   const response = await fetch(url, {
@@ -55,9 +32,17 @@ export async function apiRequest<T = any>(
     const err = new Error(data?.error || `Request failed (${response.status})`) as Error & {
       status?: number;
       code?: string;
+      locked?: boolean;
+      lockedUntil?: number | null;
+      retryAfterSeconds?: number;
+      attemptsRemaining?: number;
     };
     err.status = response.status;
     err.code = data?.code;
+    err.locked = data?.locked;
+    err.lockedUntil = data?.lockedUntil;
+    err.retryAfterSeconds = data?.retryAfterSeconds;
+    err.attemptsRemaining = data?.attemptsRemaining;
     throw err;
   }
   return data as T;
@@ -68,5 +53,5 @@ export function formatINR(amount: number): string {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Number.isFinite(amount) ? amount : 0);
 }

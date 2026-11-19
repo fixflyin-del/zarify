@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, CreditCard, LocateFixed, ShieldCheck, Truck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, LocateFixed, Lock, ShieldCheck, Truck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
 import { apiRequest, formatINR } from '../lib/api';
+import { placeCustomerOrder } from '../lib/firestoreStore';
 import { SEO } from '../components/SEO';
 
 export function CheckoutPage() {
-  const { cart, user, t, refreshCart, notify } = useStore();
+  const { cart, user, loginWithGoogle, clearCart, t, notify } = useStore();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -21,13 +22,9 @@ export function CheckoutPage() {
     state: '',
     pincode: '',
     landmark: '',
-    latitude: '',
-    longitude: '',
     notes: '',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<'payu' | 'cod'>('payu');
-  const [payuStatus, setPayuStatus] = useState<{ configured: boolean; env: string } | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [locationMessage, setLocationMessage] = useState('');
   const [pinInfo, setPinInfo] = useState<{
@@ -50,17 +47,6 @@ export function CheckoutPage() {
     }
   }, [user]);
 
-  useEffect(() => {
-    apiRequest<{ configured: boolean; env: string }>('/api/payments/payu/status')
-      .then((status) => {
-        setPayuStatus(status);
-        if (!status.configured) {
-          setPaymentMethod('cod');
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const lookupPincode = async (pin: string) => {
     if (!/^\d{6}$/.test(pin)) {
       setPinInfo(null);
@@ -70,7 +56,7 @@ export function CheckoutPage() {
       const data = await apiRequest<any>(`/api/pincode/${pin}`);
       setPinInfo({
         serviceable: true,
-        estimatedDelivery: data.estimatedDelivery,
+        estimatedDelivery: data.deliveryEstimate || data.estimatedDelivery || '4–6 business days',
         city: data.city,
         state: data.state,
       });
@@ -110,14 +96,12 @@ export function CheckoutPage() {
 
           setForm((prev) => ({
             ...prev,
-            houseFlat: data.houseFlat || prev.houseFlat,
             streetArea: data.streetArea || prev.streetArea,
             city: data.city || prev.city,
             district: data.district || prev.district,
             state: data.state || prev.state,
             pincode: /^\d{6}$/.test(data.pincode) ? data.pincode : prev.pincode,
-            latitude: String(latitude),
-            longitude: String(longitude),
+            landmark: data.landmark || prev.landmark,
           }));
 
           if (/^\d{6}$/.test(data.pincode)) {
@@ -125,11 +109,11 @@ export function CheckoutPage() {
           }
 
           setLocationMessage(
-            'Available address details detected from your coordinates. Please verify and complete any missing house/flat number before ordering.'
+            'Address details detected from your coordinates. Please verify house/flat number before ordering.'
           );
         } catch (err: any) {
           setLocationMessage(
-            err?.message || 'Unable to reverse-geocode your location. Please enter address manually.'
+            err?.message || 'Unable to detect address. Please enter your details manually.'
           );
         } finally {
           setDetecting(false);
@@ -137,37 +121,23 @@ export function CheckoutPage() {
       },
       (geoErr) => {
         setDetecting(false);
-        if (geoErr.code === geoErr.PERMISSION_DENIED) {
-          setLocationMessage(
-            'Location permission was declined. You can enter your shipping address and 6-digit PIN code manually below.'
-          );
-        } else {
-          setLocationMessage(
-            'Could not determine your location right now. Please enter your address manually.'
-          );
-        }
+        setLocationMessage(
+          geoErr.code === geoErr.PERMISSION_DENIED
+            ? 'Location permission declined. Please enter your shipping address manually.'
+            : 'Could not determine your location right now. Please enter your address manually.'
+        );
       },
       { enableHighAccuracy: true, timeout: 12000 }
     );
   };
 
-  const submitPayUForm = (actionUrl: string, fields: Record<string, string>) => {
-    const formEl = document.createElement('form');
-    formEl.method = 'POST';
-    formEl.action = actionUrl;
-    Object.entries(fields).forEach(([key, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value;
-      formEl.appendChild(input);
-    });
-    document.body.appendChild(formEl);
-    formEl.submit();
-  };
-
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      notify('Please sign in with your ZARIFLY account to place an order.', 'info');
+      navigate('/login');
+      return;
+    }
     if (!/^\d{6}$/.test(form.pincode.trim())) {
       notify('Please enter a valid 6-digit Indian PIN code.', 'error');
       return;
@@ -175,26 +145,44 @@ export function CheckoutPage() {
 
     try {
       setSubmitting(true);
-      const res = await apiRequest<{
-        order: { orderNumber: string };
-        paymentGateway: 'payu' | 'cod';
-        payuPayload?: { actionUrl: string; fields: Record<string, string> };
-      }>('/api/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          paymentMethod,
-          estimatedDelivery: pinInfo?.estimatedDelivery || '3–5 Business Days',
-        }),
+      const res = await placeCustomerOrder({
+        shippingAddress: {
+          fullName: form.fullName.trim(),
+          mobile: form.mobile.trim(),
+          email: form.email.trim(),
+          houseFlat: form.houseFlat.trim(),
+          streetArea: form.streetArea.trim(),
+          city: form.city.trim(),
+          district: form.district.trim(),
+          state: form.state.trim(),
+          pincode: form.pincode.trim(),
+          landmark: form.landmark.trim(),
+        },
+        paymentMethod: 'cod',
+        notes: form.notes.trim(),
+        couponCode: cart.appliedCoupon?.code || null,
+        subtotal: cart.subtotal,
+        discountAmount: cart.discountAmount,
+        shippingFee: cart.shippingFee,
+        taxAmount: cart.taxAmount,
+        grandTotal: cart.grandTotal,
+        items: cart.items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          productName: item.productName,
+          sku: item.sku,
+          colorName: item.colorName,
+          sizeName: item.sizeName,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          totalPrice: item.lineTotal,
+          imageUrl: item.imageUrl,
+        })),
       });
 
-      if (res.paymentGateway === 'payu' && res.payuPayload) {
-        submitPayUForm(res.payuPayload.actionUrl, res.payuPayload.fields);
-        return;
-      }
-
-      await refreshCart();
-      navigate(`/order-confirmation?order=${encodeURIComponent(res.order.orderNumber)}&payment=cod`);
+      clearCart();
+      notify('Order confirmed! Thank you for shopping with ZARIFLY.', 'success');
+      navigate(`/order-confirmation?order=${encodeURIComponent(res.orderNumber)}&payment=cod`);
     } catch (err: any) {
       notify(err?.message || 'Order placement failed. Please verify your details.', 'error');
     } finally {
@@ -225,7 +213,7 @@ export function CheckoutPage() {
     <>
       <SEO
         title="Secure Checkout | ZARIFLY Boutique"
-        description="Complete your ZARIFLY handcrafted modest fashion order with automatic location detection, Indian PIN code serviceability, and PayU India secure payments."
+        description="Complete your ZARIFLY handcrafted modest fashion order with Indian PIN code serviceability and Firebase-secured order tracking."
         canonicalPath="/checkout"
       />
 
@@ -238,6 +226,37 @@ export function CheckoutPage() {
             {t('checkout.title')}
           </h1>
         </div>
+
+        {!user && (
+          <div className="mb-8 rounded-[26px] bg-gradient-to-r from-[#FFF0F6] via-[#F3EEFF] to-[#ECFEFF] border border-[#E2D9F3] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Lock className="w-5 h-5 text-[#7C3AED] shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-extrabold text-[#181326]">
+                  Sign in to link your order to your ZARIFLY account
+                </p>
+                <p className="text-xs text-[#5E5474]">
+                  Firebase Authentication protects your order history, invoice receipt, and delivery updates.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => loginWithGoogle().catch((e) => notify(e.message, 'error'))}
+                className="px-5 py-2.5 rounded-full bg-[#181326] text-white text-xs font-extrabold uppercase tracking-wider cursor-pointer"
+              >
+                Continue with Google
+              </button>
+              <Link
+                to="/login"
+                className="px-5 py-2.5 rounded-full bg-white border border-[#E2D9F3] text-[#181326] text-xs font-extrabold uppercase tracking-wider"
+              >
+                Email Login
+              </Link>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left: Shipping Address & Payment */}
@@ -252,7 +271,7 @@ export function CheckoutPage() {
                   type="button"
                   onClick={handleDetectLocation}
                   disabled={detecting}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-extrabold bg-[#ECFEFF] text-[#0E7490] border border-[#06B6D4]/45 hover:bg-[#06B6D4] hover:text-white transition-colors whitespace-nowrap"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-extrabold bg-[#ECFEFF] text-[#0E7490] border border-[#06B6D4]/45 hover:bg-[#06B6D4] hover:text-white transition-colors whitespace-nowrap cursor-pointer"
                 >
                   <LocateFixed className="w-3.5 h-3.5" />
                   <span>{detecting ? t('checkout.detecting') : t('checkout.detectLocation')}</span>
@@ -423,69 +442,29 @@ export function CheckoutPage() {
             </div>
 
             {/* Payment Method */}
-            <div className="bg-white rounded-[30px] border border-[#EDE8F7] p-6 sm:p-8 space-y-5 shadow-[0_10px_30px_rgba(124,58,237,0.05)]">
+            <div className="bg-white rounded-[30px] border border-[#EDE8F7] p-6 sm:p-8 space-y-4 shadow-[0_10px_30px_rgba(124,58,237,0.05)]">
               <h2 className="font-serif-display text-2xl sm:text-3xl font-extrabold text-[#181326]">
                 {t('checkout.paymentMethod')}
               </h2>
 
-              <div className="space-y-3">
-                <label
-                  className={`flex items-start gap-3.5 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'payu'
-                      ? 'border-[#7C3AED] bg-[#F3EEFF]/60'
-                      : 'border-[#EDE8F7] hover:border-[#FF4D8D]/40'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    checked={paymentMethod === 'payu'}
-                    onChange={() => setPaymentMethod('payu')}
-                    className="mt-1 accent-[#7C3AED]"
-                  />
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2 text-sm font-bold text-[#181326]">
-                      <CreditCard className="w-4 h-4 text-[#7C3AED]" />
-                      <span>{t('checkout.payuLabel')}</span>
-                    </div>
-                    <p className="text-xs text-[#64597A]">
-                      Server-signed SHA-512 redirect to official PayU India checkout (
-                      {payuStatus?.env === 'production' ? 'Production' : 'Sandbox'}).
-                    </p>
-                    {payuStatus && !payuStatus.configured && (
-                      <p className="text-xs text-[#FF4D8D] pt-1 font-medium">
-                        Awaiting merchant credentials (`PAYU_MERCHANT_KEY` &amp; `PAYU_MERCHANT_SALT`
-                        in environment secrets). Please select Cash on Delivery or configure PayU
-                        keys to complete online payment.
-                      </p>
-                    )}
+              <div className="flex items-start gap-3.5 p-4 rounded-2xl border-2 border-[#FF4D8D] bg-[#FFF0F6]/60">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  checked
+                  readOnly
+                  className="mt-1 accent-[#FF4D8D]"
+                />
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-bold text-[#181326]">
+                    <Truck className="w-4 h-4 text-[#FF4D8D]" />
+                    <span>{t('checkout.codLabel')}</span>
                   </div>
-                </label>
-
-                <label
-                  className={`flex items-start gap-3.5 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'cod'
-                      ? 'border-[#FF4D8D] bg-[#FFF0F6]/60'
-                      : 'border-[#EDE8F7] hover:border-[#7C3AED]/40'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
-                    className="mt-1 accent-[#FF4D8D]"
-                  />
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2 text-sm font-bold text-[#181326]">
-                      <Truck className="w-4 h-4 text-[#FF4D8D]" />
-                      <span>{t('checkout.codLabel')}</span>
-                    </div>
-                    <p className="text-xs text-[#64597A]">
-                      Pay in cash or UPI directly to the courier partner upon inspecting your parcel.
-                    </p>
-                  </div>
-                </label>
+                  <p className="text-xs text-[#64597A]">
+                    Pay in cash or UPI directly to our courier partner upon delivery. Online gateway
+                    integration is scheduled for Phase 2.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -547,19 +526,19 @@ export function CheckoutPage() {
             <motion.button
               whileTap={{ scale: 0.98 }}
               type="submit"
-              disabled={submitting || (paymentMethod === 'payu' && payuStatus !== null && !payuStatus.configured)}
-              className="w-full py-4 rounded-full bg-gradient-to-r from-[#FF4D8D] via-[#EC4899] to-[#7C3AED] text-white text-xs font-extrabold tracking-[0.14em] uppercase hover:brightness-110 disabled:opacity-45 transition-all shadow-[0_10px_28px_rgba(255,77,141,0.35)]"
+              disabled={submitting || !user}
+              className="w-full py-4 rounded-full bg-gradient-to-r from-[#FF4D8D] via-[#EC4899] to-[#7C3AED] text-white text-xs font-extrabold tracking-[0.14em] uppercase hover:brightness-110 disabled:opacity-45 transition-all shadow-[0_10px_28px_rgba(255,77,141,0.35)] cursor-pointer"
             >
               {submitting
                 ? t('common.loading')
-                : paymentMethod === 'payu'
-                  ? `Pay ${formatINR(cart.grandTotal)} via PayU`
+                : !user
+                  ? 'Sign In Above to Place Order'
                   : `${t('checkout.placeOrder')} (${formatINR(cart.grandTotal)})`}
             </motion.button>
 
             <p className="text-[11px] text-[#64597A] flex items-center justify-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-[#7C3AED]" />
-              <span>Transaction-safe inventory reservation &amp; encrypted checkout</span>
+              <span>Cloud Firestore verified order creation &amp; inventory update</span>
             </p>
           </aside>
         </form>

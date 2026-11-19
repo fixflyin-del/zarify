@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { apiRequest } from '../lib/api';
+import { subscribeNewsletter } from '../lib/firestoreStore';
 import { FOUNDER_SOCIALS, OFFICIAL_FOUNDER_PORTRAIT } from '../lib/brandAssets';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
@@ -185,10 +185,7 @@ export function HomePage() {
     if (!newsletterEmail.trim()) return;
     try {
       setSubmittingNews(true);
-      await apiRequest('/api/newsletter', {
-        method: 'POST',
-        body: JSON.stringify({ email: newsletterEmail.trim() }),
-      });
+      await subscribeNewsletter(newsletterEmail.trim(), 'homepage');
       setNewsletterEmail('');
       notify(t('home.newsletterSuccess'), 'success');
     } catch (err: any) {

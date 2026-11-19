@@ -1,17 +1,18 @@
 export type Language = 'en' | 'hi';
 
 export interface User {
-  id: number;
+  id: string;
   uid: string;
   email: string;
   fullName: string;
   phone: string;
   role: 'customer' | 'admin' | 'super_admin' | string;
   preferredLang: Language | string;
+  createdAt?: string;
 }
 
 export interface Category {
-  id: number;
+  id: string;
   slug: string;
   name: string;
   nameHi: string;
@@ -25,18 +26,18 @@ export interface Category {
 }
 
 export interface ProductImage {
-  id?: number;
-  productId?: number;
+  id?: string;
+  productId?: string;
   url: string;
-  cloudinaryPublicId?: string;
+  storagePath?: string;
   altText?: string;
   colorName?: string;
   sortOrder: number;
 }
 
 export interface ProductVariant {
-  id?: number;
-  productId?: number;
+  id?: string;
+  productId?: string;
   sku: string;
   colorName: string;
   colorHex: string;
@@ -48,8 +49,9 @@ export interface ProductVariant {
 }
 
 export interface Product {
-  id: number;
-  categoryId: number;
+  id: string;
+  categoryId: string;
+  categorySlug?: string;
   category?: Category | null;
   slug: string;
   name: string;
@@ -76,16 +78,16 @@ export interface Product {
 }
 
 export interface CartItem {
-  id: number;
+  id: string;
   quantity: number;
-  productId: number;
+  productId: string;
   productSlug: string;
   productName: string;
   productNameHi?: string | null;
   unitPrice: number;
   originalPrice: number;
   lineTotal: number;
-  variantId: number;
+  variantId: string;
   sku: string;
   colorName: string;
   colorHex: string;
@@ -96,8 +98,7 @@ export interface CartItem {
 }
 
 export interface CartState {
-  cartId: number | null;
-  sessionId?: string | null;
+  cartId: string | null;
   items: CartItem[];
   itemCount: number;
   subtotal: number;
@@ -111,7 +112,7 @@ export interface CartState {
 }
 
 export interface Banner {
-  id: number;
+  id: string;
   heading: string;
   headingHi?: string;
   subheading?: string;
@@ -126,20 +127,21 @@ export interface Banner {
 }
 
 export interface ReelItem {
-  id: number;
+  id: string;
   title: string;
   caption?: string;
   videoUrl?: string;
   thumbnailUrl: string;
-  productId?: number | null;
+  productId?: string | null;
   product?: Product | null;
   sortOrder: number;
   isActive: boolean;
 }
 
 export interface ReviewItem {
-  id: number;
-  productId?: number;
+  id: string;
+  productId?: string;
+  userId?: string;
   rating: number;
   title?: string;
   comment: string;
@@ -154,7 +156,7 @@ export interface ReviewItem {
 }
 
 export interface BlogPost {
-  id: number;
+  id: string;
   slug: string;
   title: string;
   titleHi?: string;
@@ -171,6 +173,20 @@ export interface BlogPost {
   publishedAt: string;
 }
 
+export interface CouponItem {
+  id: string;
+  code: string;
+  description: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscount?: number | null;
+  usageLimit?: number | null;
+  usedCount: number;
+  isActive: boolean;
+  expiresAt?: string | null;
+}
+
 export interface StoreSettings {
   announcementEn?: string;
   announcementHi?: string;
@@ -185,13 +201,14 @@ export interface StoreSettings {
   flatShippingFee?: number;
   taxRatePercent?: number;
   codEnabled?: boolean;
-  instagramPosts?: Array<{ imageUrl: string; caption: string; link: string }>;
 }
 
 export interface OrderItem {
-  id: number;
-  productId?: number | null;
-  variantId?: number | null;
+  id: string;
+  orderId?: string;
+  orderNumber?: string;
+  productId?: string | null;
+  variantId?: string | null;
   productName: string;
   sku: string;
   colorName: string;
@@ -203,7 +220,8 @@ export interface OrderItem {
 }
 
 export interface Order {
-  id: number;
+  id: string;
+  userId?: string;
   orderNumber: string;
   customerName: string;
   customerEmail: string;
@@ -235,4 +253,17 @@ export interface Order {
   notes?: string;
   createdAt: string;
   items?: OrderItem[];
+}
+
+export interface OrderTrackingSummary {
+  orderNumber: string;
+  orderStatus: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  grandTotal: number;
+  courierName?: string;
+  trackingNumber?: string;
+  estimatedDelivery?: string;
+  cityState?: string;
+  createdAt: string;
 }

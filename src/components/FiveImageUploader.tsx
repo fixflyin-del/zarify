@@ -8,7 +8,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { apiRequest } from '../lib/api';
+import { deleteMediaFile, uploadMediaFile } from '../lib/mediaStorage';
 import type { ProductImage } from '../types';
 
 interface UploadTask {
@@ -19,7 +19,7 @@ interface UploadTask {
   status: 'uploading' | 'done' | 'failed';
   error?: string;
   uploadedUrl?: string;
-  publicId?: string;
+  storagePath?: string;
 }
 
 interface FiveImageUploaderProps {
@@ -42,66 +42,14 @@ export function FiveImageUploader({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [cloudinaryWarning, setCloudinaryWarning] = useState('');
+  const [storageNotice, setStorageNotice] = useState('');
   const [manualUrl, setManualUrl] = useState('');
 
-  const uploadSingleToCloudinary = (
-    task: UploadTask,
-    sig: {
-      signature: string;
-      timestamp: number;
-      folder: string;
-      cloudName: string;
-      apiKey: string;
-    }
-  ): Promise<{ url: string; publicId: string }> => {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', task.file);
-      formData.append('api_key', sig.apiKey);
-      formData.append('timestamp', String(sig.timestamp));
-      formData.append('signature', sig.signature);
-      formData.append('folder', sig.folder);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`);
-
-      xhr.upload.onprogress = (evt) => {
-        if (evt.lengthComputable) {
-          const pct = Math.round((evt.loaded / evt.total) * 100);
-          setTasks((prev) =>
-            prev.map((t) => (t.id === task.id ? { ...t, progress: pct } : t))
-          );
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const json = JSON.parse(xhr.responseText);
-            const optimized = String(json.secure_url || '').replace(
-              '/upload/',
-              '/upload/f_auto,q_auto,w_1200,h_1200,c_fill/'
-            );
-            resolve({ url: optimized, publicId: json.public_id || '' });
-          } catch {
-            reject(new Error('Invalid Cloudinary response'));
-          }
-        } else {
-          reject(new Error(`Upload failed (${xhr.status})`));
-        }
-      };
-
-      xhr.onerror = () => reject(new Error('Network error during upload'));
-      xhr.send(formData);
-    });
-  };
-
   const processFiles = async (fileList: FileList | File[]) => {
-    setCloudinaryWarning('');
+    setStorageNotice('');
     const remainingSlots = MAX_IMAGES - images.length;
     if (remainingSlots <= 0) {
-      setCloudinaryWarning('Maximum 5 square product images reached. Remove or replace one first.');
+      setStorageNotice('Maximum 5 square product images reached. Remove or replace one first.');
       return;
     }
 
@@ -109,31 +57,17 @@ export function FiveImageUploader({
     const validFiles: File[] = [];
     for (const file of incoming) {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        setCloudinaryWarning(`Skipped ${file.name}: Only JPG, PNG, WebP, or AVIF allowed.`);
+        setStorageNotice(`Skipped ${file.name}: Only JPG, PNG, WebP, or AVIF allowed.`);
         continue;
       }
       if (file.size > MAX_SIZE_BYTES) {
-        setCloudinaryWarning(`Skipped ${file.name}: Maximum file size is 8 MB.`);
+        setStorageNotice(`Skipped ${file.name}: Maximum file size is 8 MB.`);
         continue;
       }
       validFiles.push(file);
     }
 
     if (validFiles.length === 0) return;
-
-    let sig: any;
-    try {
-      sig = await apiRequest('/api/admin/cloudinary/signature', {
-        method: 'POST',
-        body: JSON.stringify({ folder: 'products' }),
-      });
-    } catch (err: any) {
-      setCloudinaryWarning(
-        err?.message ||
-          'Cloudinary is awaiting credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET). You may add verified studio image URLs below in the meantime.'
-      );
-      return;
-    }
 
     const initialTasks: UploadTask[] = validFiles.map((file, idx) => ({
       id: `${Date.now()}-${idx}-${file.name}`,
@@ -151,7 +85,11 @@ export function FiveImageUploader({
     await Promise.all(
       initialTasks.map(async (task) => {
         try {
-          const result = await uploadSingleToCloudinary(task, sig);
+          const result = await uploadMediaFile(task.file, 'products', (pct) => {
+            setTasks((prev) =>
+              prev.map((t) => (t.id === task.id ? { ...t, progress: pct } : t))
+            );
+          });
           setTasks((prev) =>
             prev.map((t) =>
               t.id === task.id
@@ -160,24 +98,24 @@ export function FiveImageUploader({
                     progress: 100,
                     status: 'done',
                     uploadedUrl: result.url,
-                    publicId: result.publicId,
+                    storagePath: result.storagePath,
                   }
                 : t
             )
           );
           completed.push({
             url: result.url,
-            cloudinaryPublicId: result.publicId,
+            storagePath: result.storagePath,
             altText: task.file.name.replace(/\.[^.]+$/, ''),
             colorName: '',
             sortOrder: images.length + completed.length,
           });
         } catch (err: any) {
+          const msg = err?.message || 'Upload failed';
+          setStorageNotice(msg);
           setTasks((prev) =>
             prev.map((t) =>
-              t.id === task.id
-                ? { ...t, status: 'failed', error: err?.message || 'Upload failed' }
-                : t
+              t.id === task.id ? { ...t, status: 'failed', error: msg } : t
             )
           );
         }
@@ -196,17 +134,28 @@ export function FiveImageUploader({
 
   const retryTask = async (task: UploadTask) => {
     try {
-      const sig = await apiRequest('/api/admin/cloudinary/signature', {
-        method: 'POST',
-        body: JSON.stringify({ folder: 'products' }),
-      });
-      setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, status: 'uploading', progress: 0, error: '' } : t))
-      );
-      const result = await uploadSingleToCloudinary(task, sig);
+      setStorageNotice('');
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, status: 'done', progress: 100, uploadedUrl: result.url } : t
+          t.id === task.id ? { ...t, status: 'uploading', progress: 0, error: '' } : t
+        )
+      );
+      const result = await uploadMediaFile(task.file, 'products', (pct) => {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === task.id ? { ...t, progress: pct } : t))
+        );
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? {
+                ...t,
+                status: 'done',
+                progress: 100,
+                uploadedUrl: result.url,
+                storagePath: result.storagePath,
+              }
+            : t
         )
       );
       onChange(
@@ -214,16 +163,21 @@ export function FiveImageUploader({
           ...images,
           {
             url: result.url,
-            cloudinaryPublicId: result.publicId,
-            altText: task.file.name,
+            storagePath: result.storagePath,
+            altText: task.file.name.replace(/\.[^.]+$/, ''),
             colorName: '',
             sortOrder: images.length,
           },
-        ].slice(0, MAX_IMAGES)
+        ]
+          .slice(0, MAX_IMAGES)
+          .map((img, i) => ({ ...img, sortOrder: i }))
       );
     } catch (err: any) {
+      setStorageNotice(err?.message || 'Retry failed');
       setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, status: 'failed', error: err?.message } : t))
+        prev.map((t) =>
+          t.id === task.id ? { ...t, status: 'failed', error: err?.message } : t
+        )
       );
     }
   };
@@ -237,6 +191,10 @@ export function FiveImageUploader({
   };
 
   const removeImage = (idx: number) => {
+    const removed = images[idx];
+    if (removed?.storagePath) {
+      void deleteMediaFile(removed.storagePath);
+    }
     onChange(images.filter((_, i) => i !== idx).map((img, i) => ({ ...img, sortOrder: i })));
   };
 
@@ -263,10 +221,10 @@ export function FiveImageUploader({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold uppercase tracking-wider text-[#1C1917]">
+        <label className="text-xs font-semibold uppercase tracking-wider text-[#181326]">
           Product Gallery (5 Square 1:1 Images) — {images.length} / {MAX_IMAGES}
         </label>
-        <span className="text-[11px] text-[#78716C]">Drag &amp; drop up to 5 images together</span>
+        <span className="text-[11px] text-[#7E7394]">Firebase Storage · Drag &amp; drop up to 5 images</span>
       </div>
 
       {/* Drop Zone */}
@@ -282,10 +240,10 @@ export function FiveImageUploader({
           if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
         }}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+        className={`rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
           dragActive
-            ? 'border-[#B8924A] bg-[#FAF7F2]'
-            : 'border-[#DFD3C0] bg-[#FAF7F2]/60 hover:border-[#B8924A]'
+            ? 'border-[#FF4D8D] bg-[#FFF0F6]'
+            : 'border-[#E6DDF5] bg-[#FAFAFF] hover:border-[#7C3AED]'
         }`}
       >
         <input
@@ -299,29 +257,29 @@ export function FiveImageUploader({
             e.target.value = '';
           }}
         />
-        <CloudUpload className="w-7 h-7 mx-auto text-[#8A6B2F] mb-2" />
-        <p className="text-xs font-medium text-[#1C1917]">
-          Select or drag &amp; drop up to 5 square product images for simultaneous Cloudinary upload
+        <CloudUpload className="w-7 h-7 mx-auto text-[#7C3AED] mb-2" />
+        <p className="text-xs font-semibold text-[#181326]">
+          Select or drag &amp; drop up to 5 square product images for Firebase Storage upload
         </p>
-        <p className="text-[11px] text-[#78716C] mt-1">
-          JPG, PNG, WebP, AVIF · Max 8 MB each · Auto-optimized via backend Cloudinary signature
+        <p className="text-[11px] text-[#7E7394] mt-1">
+          JPG, PNG, WebP, AVIF · Max 8 MB each · Simultaneous uploads with live progress &amp; retry
         </p>
       </div>
 
       {/* Overall & Per-File Upload Progress */}
       {tasks.length > 0 && (
-        <div className="bg-white border border-[#E6DDD0] p-4 space-y-3">
+        <div className="bg-white rounded-2xl border border-[#EFE7F8] p-4 space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-[#1C1917]">Uploading Product Images</span>
-            <span className="tabular-nums font-semibold text-[#8A6B2F]">{overallProgress}%</span>
+            <span className="font-semibold text-[#181326]">Uploading to Firebase Storage</span>
+            <span className="tabular-nums font-semibold text-[#7C3AED]">{overallProgress}%</span>
           </div>
-          <div className="w-full h-2 bg-[#EFE8DC] overflow-hidden">
+          <div className="w-full h-2 rounded-full bg-[#F3EDFF] overflow-hidden">
             <div
               style={{ width: `${overallProgress}%` }}
-              className="h-full bg-[#B8924A] transition-all duration-150"
+              className="h-full bg-gradient-to-r from-[#FF4D8D] to-[#7C3AED] transition-all duration-150"
             />
           </div>
-          <p className="text-[11px] text-[#57534E] tabular-nums">
+          <p className="text-[11px] text-[#5B526E] tabular-nums">
             {doneCount} of {tasks.length} Images Uploaded
           </p>
 
@@ -329,22 +287,22 @@ export function FiveImageUploader({
             {tasks.map((task) => (
               <div
                 key={task.id}
-                className="flex items-center justify-between gap-3 text-xs border-t border-[#F2ECE1] pt-2"
+                className="flex items-center justify-between gap-3 text-xs border-t border-[#F4EFFC] pt-2"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <img
                     src={task.previewUrl}
                     alt={task.file.name}
-                    className="w-8 h-8 object-cover border border-[#E6DDD0] shrink-0"
+                    className="w-8 h-8 rounded-lg object-cover border border-[#EFE7F8] shrink-0"
                   />
-                  <span className="truncate text-[#1C1917]">{task.file.name}</span>
+                  <span className="truncate text-[#181326]">{task.file.name}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {task.status === 'uploading' && (
-                    <span className="tabular-nums text-[#8A6B2F]">{task.progress}%</span>
+                    <span className="tabular-nums text-[#7C3AED] font-semibold">{task.progress}%</span>
                   )}
                   {task.status === 'done' && (
-                    <span className="inline-flex items-center gap-1 text-[#166534]">
+                    <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Uploaded
                     </span>
                   )}
@@ -352,7 +310,7 @@ export function FiveImageUploader({
                     <button
                       type="button"
                       onClick={() => retryTask(task)}
-                      className="inline-flex items-center gap-1 text-[#991B1B] underline"
+                      className="inline-flex items-center gap-1 text-rose-700 underline cursor-pointer"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       Retry
@@ -366,26 +324,26 @@ export function FiveImageUploader({
         </div>
       )}
 
-      {cloudinaryWarning && (
-        <p className="text-xs text-[#8A6B2F] bg-[#FAF7F2] border border-[#DFD3C0] p-3">
-          {cloudinaryWarning}
+      {storageNotice && (
+        <p className="text-xs text-[#9D174D] bg-[#FFF0F6] border border-[#FBCFE8] rounded-xl p-3">
+          {storageNotice}
         </p>
       )}
 
-      {/* Manual Studio/Cloudinary Image URL Entry */}
+      {/* Manual Studio/Firebase Image URL Entry */}
       {images.length < MAX_IMAGES && (
         <div className="flex gap-2">
           <input
             type="text"
             value={manualUrl}
             onChange={(e) => setManualUrl(e.target.value)}
-            placeholder="Or paste verified Cloudinary / studio image URL..."
-            className="flex-1 px-3 py-2 text-xs bg-[#FAF7F2] border border-[#DFD3C0] outline-none focus:border-[#B8924A]"
+            placeholder="Or paste Firebase Storage / studio image URL..."
+            className="flex-1 px-3 py-2 text-xs rounded-xl bg-[#FAFAFF] border border-[#E6DDF5] outline-none focus:border-[#7C3AED]"
           />
           <button
             type="button"
             onClick={addManualUrl}
-            className="px-4 py-2 text-xs font-medium border border-[#1C1917] hover:bg-[#1C1917] hover:text-white transition-colors"
+            className="px-4 py-2 text-xs font-semibold rounded-xl border border-[#181326] hover:bg-[#181326] hover:text-white transition-colors cursor-pointer"
           >
             Add URL
           </button>
@@ -398,16 +356,16 @@ export function FiveImageUploader({
           {images.map((img, idx) => (
             <div
               key={`${img.url}-${idx}`}
-              className="bg-white border border-[#E6DDD0] p-2 space-y-2"
+              className="bg-white rounded-xl border border-[#EFE7F8] p-2 space-y-2"
             >
-              <div className="relative aspect-square bg-[#F4EFE6] overflow-hidden">
+              <div className="relative aspect-square rounded-lg bg-[#F5F0FF] overflow-hidden">
                 <img
                   src={img.url}
                   alt={img.altText || `Slot ${idx + 1}`}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
-                <span className="absolute top-1 left-1 bg-[#1C1917]/80 text-white text-[10px] px-1.5 py-0.5 tabular-nums">
+                <span className="absolute top-1 left-1 bg-[#181326]/80 text-white text-[10px] px-1.5 py-0.5 rounded-md tabular-nums">
                   #{idx + 1}
                 </span>
               </div>
@@ -420,7 +378,7 @@ export function FiveImageUploader({
                     copy[idx] = { ...copy[idx], colorName: e.target.value };
                     onChange(copy);
                   }}
-                  className="w-full text-[10px] bg-[#FAF7F2] border border-[#DFD3C0] px-1.5 py-1"
+                  className="w-full text-[10px] rounded-lg bg-[#FAFAFF] border border-[#E6DDF5] px-1.5 py-1"
                 >
                   <option value="">All colours</option>
                   {availableColors.map((c) => (
@@ -438,7 +396,7 @@ export function FiveImageUploader({
                     disabled={idx === 0}
                     onClick={() => moveImage(idx, -1)}
                     aria-label="Move left"
-                    className="p-1 border border-[#E6DDD0] disabled:opacity-30"
+                    className="p-1 rounded-md border border-[#EFE7F8] disabled:opacity-30 cursor-pointer"
                   >
                     <ArrowLeft className="w-3 h-3" />
                   </button>
@@ -447,7 +405,7 @@ export function FiveImageUploader({
                     disabled={idx === images.length - 1}
                     onClick={() => moveImage(idx, 1)}
                     aria-label="Move right"
-                    className="p-1 border border-[#E6DDD0] disabled:opacity-30"
+                    className="p-1 rounded-md border border-[#EFE7F8] disabled:opacity-30 cursor-pointer"
                   >
                     <ArrowRight className="w-3 h-3" />
                   </button>
@@ -456,7 +414,7 @@ export function FiveImageUploader({
                   type="button"
                   onClick={() => removeImage(idx)}
                   aria-label="Remove image"
-                  className="p-1 text-[#991B1B] hover:bg-red-50"
+                  className="p-1 rounded-md text-rose-700 hover:bg-rose-50 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

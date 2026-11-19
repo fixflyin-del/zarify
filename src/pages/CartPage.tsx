@@ -139,7 +139,7 @@ export function CartPage() {
                           <select
                             value={item.variantId}
                             onChange={(e) =>
-                              updateCartItem(item.id, { variantId: Number(e.target.value) }).catch(
+                              updateCartItem(item.id, { variantId: e.target.value }).catch(
                                 (err) => notify(err.message, 'error')
                               )
                             }

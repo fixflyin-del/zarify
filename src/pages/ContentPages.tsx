@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { apiRequest } from '../lib/api';
+import { submitContactMessage } from '../lib/firestoreStore';
 import { FOUNDER_SOCIALS, OFFICIAL_FOUNDER_PORTRAIT } from '../lib/brandAssets';
 import { SEO } from '../components/SEO';
 
@@ -226,10 +226,7 @@ export function ContactPage() {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await apiRequest('/api/contact', {
-        method: 'POST',
-        body: JSON.stringify(form),
-      });
+      await submitContactMessage(form);
       notify('Your inquiry has been received. Our concierge will respond shortly.', 'success');
       setForm({ name: '', email: '', phone: '', subject: 'Product Inquiry', message: '' });
     } catch (err: any) {

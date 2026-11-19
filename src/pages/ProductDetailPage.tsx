@@ -17,6 +17,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
 import { apiRequest, formatINR } from '../lib/api';
+import { fetchProductDetailBySlug, submitCustomerReview } from '../lib/firestoreStore';
 import { DEFAULT_PRODUCTS } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
@@ -66,18 +67,20 @@ export function ProductDetailPage() {
     const load = async () => {
       try {
         setLoading(true);
-        const data = await apiRequest<{
-          product: Product;
-          reviews: ReviewItem[];
-          ratingDistribution: Array<{ star: number; count: number }>;
-          relatedProducts: Product[];
-        }>(`/api/products/${slug}`);
-
+        const data = await fetchProductDetailBySlug(slug);
         if (!active) return;
+        if (!data) {
+          setProduct(null);
+          return;
+        }
+        const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
+          star,
+          count: data.reviews.filter((r) => r.rating === star).length,
+        }));
         setProduct(data.product);
         setReviews(data.reviews || []);
-        setDistribution(data.ratingDistribution || []);
-        setRelatedProducts(data.relatedProducts || []);
+        setDistribution(ratingDist);
+        setRelatedProducts(data.related || []);
         setActiveImageIdx(0);
         setQuantity(1);
 
@@ -252,17 +255,18 @@ export function ProductDetailPage() {
     e.preventDefault();
     try {
       setSubmittingRev(true);
-      const res = await apiRequest<{ message: string }>('/api/reviews', {
-        method: 'POST',
-        body: JSON.stringify({
-          productId: product.id,
-          rating: revRating,
-          title: revTitle.trim(),
-          comment: revComment.trim(),
-          images: revImageUrl.trim() ? [revImageUrl.trim()] : [],
-        }),
+      await submitCustomerReview({
+        productId: product.id,
+        productName: product.name,
+        productSlug: product.slug,
+        rating: revRating,
+        title: revTitle.trim(),
+        comment: revComment.trim(),
+        imagesJson: revImageUrl.trim() ? [revImageUrl.trim()] : [],
+        customerName: user?.fullName || 'ZARIFLY Customer',
+        customerEmail: user?.email || '',
       });
-      notify(res.message, 'success');
+      notify('Thank you! Your review has been submitted for moderation.', 'success');
       setRevTitle('');
       setRevComment('');
       setRevImageUrl('');
@@ -771,7 +775,7 @@ export function ProductDetailPage() {
 
             <p className="text-[11px] text-[#64597A] flex items-center justify-center gap-1.5 pt-1">
               <ShieldCheck className="w-4 h-4 text-[#7C3AED]" />
-              <span>Authentic ZARIFLY Studio Piece · PayU &amp; COD Protected</span>
+              <span>Authentic ZARIFLY Studio Piece · Cash on Delivery Protected</span>
             </p>
           </div>
         </div>

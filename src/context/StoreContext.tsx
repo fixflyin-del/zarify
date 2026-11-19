@@ -1,14 +1,31 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+  updateProfile,
+} from 'firebase/auth';
 import { auth, googleAuthProvider } from '../lib/firebase';
-import { apiRequest, setAuthToken } from '../lib/api';
-import { DEFAULT_BOOTSTRAP } from '../lib/defaultCatalog';
+import { apiRequest } from '../lib/api';
+import {
+  ensureUserProfile,
+  fetchActiveCoupons,
+  fetchStorefrontBootstrap,
+  fetchUserWishlistIds,
+  toggleWishlistDoc,
+} from '../lib/firestoreStore';
+import { DEFAULT_BOOTSTRAP, DEFAULT_PRODUCTS } from '../lib/defaultCatalog';
 import { translations } from '../i18n/translations';
 import type {
   Banner,
   BlogPost,
+  CartItem,
   CartState,
   Category,
+  CouponItem,
   Language,
   Product,
   ReelItem,
@@ -17,25 +34,22 @@ import type {
   User,
 } from '../types';
 
-const EMPTY_CART: CartState = {
-  cartId: null,
-  items: [],
-  itemCount: 0,
-  subtotal: 0,
-  discountAmount: 0,
-  appliedCoupon: null,
-  shippingFee: 0,
-  freeShippingThreshold: 1999,
-  taxIncludedNote: 'Inclusive of 5% GST',
-  taxAmount: 0,
-  grandTotal: 0,
-};
+const CART_STORAGE_KEY = 'zarifly_firebase_cart_v1';
+const COUPON_STORAGE_KEY = 'zarifly_firebase_coupon_v1';
+
+interface PersistedCartEntry {
+  id: string;
+  productId: string;
+  variantId: string;
+  quantity: number;
+}
 
 interface BootstrapData {
   settings: StoreSettings;
   categories: Category[];
   banners: Banner[];
   reels: ReelItem[];
+  allProducts: Product[];
   bestSellers: Product[];
   newArrivals: Product[];
   featuredProducts: Product[];
@@ -62,20 +76,22 @@ interface StoreContextValue {
     password: string;
     phone?: string;
   }) => Promise<User>;
+  sendPasswordReset: (email: string) => Promise<void>;
   loginWithGoogle: () => Promise<User>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   cart: CartState;
   cartDrawerOpen: boolean;
   setCartDrawerOpen: (open: boolean) => void;
-  addToCart: (productId: number, variantId: number, quantity?: number) => Promise<void>;
-  updateCartItem: (itemId: number, payload: { quantity?: number; variantId?: number }) => Promise<void>;
-  removeCartItem: (itemId: number) => Promise<void>;
+  addToCart: (productId: string, variantId: string, quantity?: number) => Promise<void>;
+  updateCartItem: (itemId: string, payload: { quantity?: number; variantId?: string }) => Promise<void>;
+  removeCartItem: (itemId: string) => Promise<void>;
+  clearCart: () => void;
   applyCoupon: (code: string) => Promise<void>;
   removeCoupon: () => Promise<void>;
   refreshCart: () => Promise<void>;
-  wishlistIds: number[];
-  toggleWishlist: (productId: number) => Promise<void>;
+  wishlistIds: string[];
+  toggleWishlist: (productId: string) => Promise<void>;
   bootstrap: BootstrapData | null;
   bootstrapLoading: boolean;
   refreshBootstrap: () => Promise<void>;
@@ -86,6 +102,49 @@ interface StoreContextValue {
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
+
+function loadPersistedCart(): PersistedCartEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePersistedCart(entries: PersistedCartEntry[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function formatFirebaseAuthError(err: any): Error {
+  const code = err?.code || '';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+    return new Error('Invalid email or password. Please check your credentials and try again.');
+  }
+  if (code === 'auth/email-already-in-use') {
+    return new Error('An account with this email already exists. Please sign in instead.');
+  }
+  if (code === 'auth/weak-password') {
+    return new Error('Password should be at least 6 characters long.');
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return new Error(
+      'Email/Password sign-in is not yet enabled in Firebase Console. Please enable Email/Password under Authentication → Sign-in method, or use Google Sign-In.'
+    );
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return new Error('Sign-in popup was closed before completing.');
+  }
+  return new Error(err?.message || 'Authentication failed.');
+}
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
@@ -98,10 +157,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [cart, setCart] = useState<CartState>(EMPTY_CART);
+  const [cartEntries, setCartEntries] = useState<PersistedCartEntry[]>(loadPersistedCart);
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem(COUPON_STORAGE_KEY) || '';
+    }
+    return '';
+  });
+  const [coupons, setCoupons] = useState<CouponItem[]>([]);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
-  const [wishlistIds, setWishlistIds] = useState<number[]>([]);
-  const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+  const [bootstrap, setBootstrap] = useState<BootstrapData | null>({
+    ...DEFAULT_BOOTSTRAP,
+    allProducts: DEFAULT_PRODUCTS,
+  });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -132,35 +201,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const refreshBootstrap = useCallback(async () => {
     try {
       setBootstrapLoading(true);
-      const data = await apiRequest<BootstrapData>('/api/bootstrap');
-      if (data && (data.banners?.length || data.categories?.length || data.bestSellers?.length)) {
-        setBootstrap(data);
-      } else {
-        setBootstrap(DEFAULT_BOOTSTRAP);
-      }
+      const [data, activeCoupons] = await Promise.all([
+        fetchStorefrontBootstrap(),
+        fetchActiveCoupons(),
+      ]);
+      setBootstrap(data);
+      setCoupons(activeCoupons);
     } catch (err) {
-      console.error('Bootstrap fetch error (using default catalog):', err);
-      setBootstrap((prev) => prev || DEFAULT_BOOTSTRAP);
+      console.error('Firestore bootstrap fetch error:', err);
+      setBootstrap((prev) => prev || { ...DEFAULT_BOOTSTRAP, allProducts: DEFAULT_PRODUCTS });
     } finally {
       setBootstrapLoading(false);
     }
   }, []);
 
-  const refreshCart = useCallback(async () => {
-    try {
-      const data = await apiRequest<CartState>('/api/cart');
-      setCart(data);
-    } catch (err) {
-      console.error('Cart fetch error:', err);
-    }
-  }, []);
-
   const refreshAuth = useCallback(async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) {
+      setUser(null);
+      setWishlistIds([]);
+      setAuthLoading(false);
+      return;
+    }
     try {
-      setAuthLoading(true);
-      const data = await apiRequest<{ user: User; wishlistIds: number[] }>('/api/auth/me');
-      setUser(data.user);
-      setWishlistIds(data.wishlistIds || []);
+      const profile = await ensureUserProfile(fbUser);
+      setUser(profile);
+      const wl = await fetchUserWishlistIds(fbUser.uid).catch(() => []);
+      setWishlistIds(wl);
     } catch {
       setUser(null);
       setWishlistIds([]);
@@ -170,22 +237,144 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshBootstrap();
-    refreshAuth().finally(() => {
-      refreshCart();
+    void refreshBootstrap();
+  }, [refreshBootstrap]);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) {
+        setUser(null);
+        setWishlistIds([]);
+        setAuthLoading(false);
+        return;
+      }
+      try {
+        const profile = await ensureUserProfile(fbUser);
+        setUser(profile);
+        const wl = await fetchUserWishlistIds(fbUser.uid).catch(() => []);
+        setWishlistIds(wl);
+      } catch (err) {
+        console.error('Auth profile sync error:', err);
+        setUser({
+          id: fbUser.uid,
+          uid: fbUser.uid,
+          email: fbUser.email || '',
+          fullName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+          phone: '',
+          role: 'customer',
+          preferredLang: lang,
+        });
+      } finally {
+        setAuthLoading(false);
+      }
     });
-  }, [refreshBootstrap, refreshAuth, refreshCart]);
+    return () => unsub();
+  }, [lang]);
+
+  // Compute live cart state from persisted entries + live Firestore products/settings/coupons
+  const cart: CartState = useMemo(() => {
+    const products = bootstrap?.allProducts || DEFAULT_PRODUCTS;
+    const settings = bootstrap?.settings || DEFAULT_BOOTSTRAP.settings;
+    const freeThreshold = Number(settings.freeShippingThreshold ?? 1999);
+    const flatShipping = Number(settings.flatShippingFee ?? 120);
+    const taxRate = Number(settings.taxRatePercent ?? 5);
+
+    const items: CartItem[] = [];
+    for (const entry of cartEntries) {
+      const product = products.find((p) => p.id === entry.productId);
+      if (!product) continue;
+      const variant =
+        product.variants.find((v) => v.id === entry.variantId) || product.variants[0];
+      if (!variant) continue;
+
+      const unitPrice = variant.priceOverride != null ? variant.priceOverride : product.sellingPrice;
+      const qty = Math.max(1, Math.min(entry.quantity, Math.max(1, variant.stockQuantity || 10)));
+      const matchedImg =
+        variant.imageUrl ||
+        product.images.find((im) => im.colorName === variant.colorName)?.url ||
+        product.images[0]?.url ||
+        '';
+
+      items.push({
+        id: entry.id,
+        quantity: qty,
+        productId: product.id,
+        productSlug: product.slug,
+        productName: product.name,
+        productNameHi: product.nameHi,
+        unitPrice,
+        originalPrice: product.originalPrice,
+        lineTotal: unitPrice * qty,
+        variantId: variant.id || entry.variantId,
+        sku: variant.sku || product.sku,
+        colorName: variant.colorName,
+        colorHex: variant.colorHex,
+        sizeName: variant.sizeName,
+        stockQuantity: variant.stockQuantity,
+        imageUrl: matchedImg,
+        availableVariants: product.variants,
+      });
+    }
+
+    const subtotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
+    const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+    let discountAmount = 0;
+    let appliedCoupon: { code: string; description: string } | null = null;
+    if (appliedCouponCode && subtotal > 0) {
+      const found = coupons.find(
+        (c) => c.isActive && c.code.toUpperCase() === appliedCouponCode.toUpperCase()
+      );
+      if (found && subtotal >= found.minOrderAmount) {
+        if (found.discountType === 'percent') {
+          discountAmount = Math.round((subtotal * found.discountValue) / 100);
+          if (found.maxDiscount && discountAmount > found.maxDiscount) {
+            discountAmount = found.maxDiscount;
+          }
+        } else {
+          discountAmount = Math.min(subtotal, found.discountValue);
+        }
+        appliedCoupon = { code: found.code, description: found.description };
+      }
+    }
+
+    const afterDiscount = Math.max(0, subtotal - discountAmount);
+    const shippingFee = afterDiscount === 0 || afterDiscount >= freeThreshold ? 0 : flatShipping;
+    const taxAmount = Math.round((afterDiscount * taxRate) / (100 + taxRate));
+    const grandTotal = afterDiscount + shippingFee;
+
+    return {
+      cartId: user?.uid || 'local-cart',
+      items,
+      itemCount,
+      subtotal,
+      discountAmount,
+      appliedCoupon,
+      shippingFee,
+      freeShippingThreshold: freeThreshold,
+      taxIncludedNote: `Inclusive of ${taxRate}% GST`,
+      taxAmount,
+      grandTotal,
+    };
+  }, [bootstrap, cartEntries, appliedCouponCode, coupons, user?.uid]);
+
+  const refreshCart = useCallback(async () => {
+    setCartEntries(loadPersistedCart());
+    const freshCoupons = await fetchActiveCoupons().catch(() => []);
+    if (freshCoupons.length) setCoupons(freshCoupons);
+  }, []);
 
   const loginWithEmail = async (email: string, password: string) => {
-    const res = await apiRequest<{ user: User; token: string }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    setAuthToken(res.token);
-    setUser(res.user);
-    await refreshAuth();
-    await refreshCart();
-    return res.user;
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const profile = await ensureUserProfile(cred.user);
+      setUser(profile);
+      const wl = await fetchUserWishlistIds(cred.user.uid).catch(() => []);
+      setWishlistIds(wl);
+      return profile;
+    } catch (err) {
+      throw formatFirebaseAuthError(err);
+    }
   };
 
   const registerWithEmail = async (payload: {
@@ -194,88 +383,148 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     password: string;
     phone?: string;
   }) => {
-    const res = await apiRequest<{ user: User; token: string }>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    setAuthToken(res.token);
-    setUser(res.user);
-    await refreshCart();
-    return res.user;
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        payload.email.trim(),
+        payload.password
+      );
+      if (payload.fullName.trim()) {
+        await updateProfile(cred.user, { displayName: payload.fullName.trim() }).catch(() => {});
+      }
+      const profile = await ensureUserProfile(cred.user, {
+        fullName: payload.fullName.trim(),
+        phone: payload.phone || '',
+        preferredLang: lang,
+      });
+      setUser(profile);
+      setWishlistIds([]);
+      return profile;
+    } catch (err) {
+      throw formatFirebaseAuthError(err);
+    }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (err) {
+      throw formatFirebaseAuthError(err);
+    }
   };
 
   const loginWithGoogle = async () => {
-    const credential = await signInWithPopup(auth, googleAuthProvider);
-    const idToken = await credential.user.getIdToken();
-    const res = await apiRequest<{ user: User; token: string }>('/api/auth/firebase', {
-      method: 'POST',
-      body: JSON.stringify({ idToken }),
-    });
-    setAuthToken(res.token);
-    setUser(res.user);
-    await refreshAuth();
-    await refreshCart();
-    return res.user;
+    try {
+      const cred = await signInWithPopup(auth, googleAuthProvider);
+      const profile = await ensureUserProfile(cred.user);
+      setUser(profile);
+      const wl = await fetchUserWishlistIds(cred.user.uid).catch(() => []);
+      setWishlistIds(wl);
+      return profile;
+    } catch (err) {
+      throw formatFirebaseAuthError(err);
+    }
   };
 
   const logout = async () => {
     try {
-      await apiRequest('/api/auth/logout', { method: 'POST' });
-      await firebaseSignOut(auth).catch(() => {});
+      await apiRequest('/api/admin-security/lock', { method: 'POST' }).catch(() => {});
+      await firebaseSignOut(auth);
     } finally {
-      setAuthToken(null);
       setUser(null);
       setWishlistIds([]);
-      await refreshCart();
       notify(lang === 'hi' ? 'आप सफलतापूर्वक लॉग आउट हो गए।' : 'Signed out successfully.', 'info');
     }
   };
 
-  const addToCart = async (productId: number, variantId: number, quantity = 1) => {
-    const data = await apiRequest<CartState>('/api/cart/items', {
-      method: 'POST',
-      body: JSON.stringify({ productId, variantId, quantity }),
+  const addToCart = async (productId: string, variantId: string, quantity = 1) => {
+    setCartEntries((prev) => {
+      const existing = prev.find((e) => e.productId === productId && e.variantId === variantId);
+      const next = existing
+        ? prev.map((e) =>
+            e.id === existing.id ? { ...e, quantity: e.quantity + Math.max(1, quantity) } : e
+          )
+        : [
+            ...prev,
+            {
+              id: `ci_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              productId,
+              variantId,
+              quantity: Math.max(1, quantity),
+            },
+          ];
+      savePersistedCart(next);
+      return next;
     });
-    setCart(data);
     setCartDrawerOpen(true);
     notify(lang === 'hi' ? 'आपके बैग में जोड़ा गया।' : 'Added to your shopping bag.', 'success');
   };
 
   const updateCartItem = async (
-    itemId: number,
-    payload: { quantity?: number; variantId?: number }
+    itemId: string,
+    payload: { quantity?: number; variantId?: string }
   ) => {
-    const data = await apiRequest<CartState>(`/api/cart/items/${itemId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
+    setCartEntries((prev) => {
+      const next = prev
+        .map((e) => {
+          if (e.id !== itemId) return e;
+          const nextQty = payload.quantity != null ? payload.quantity : e.quantity;
+          if (nextQty <= 0) return null;
+          return {
+            ...e,
+            quantity: nextQty,
+            variantId: payload.variantId || e.variantId,
+          };
+        })
+        .filter(Boolean) as PersistedCartEntry[];
+      savePersistedCart(next);
+      return next;
     });
-    setCart(data);
   };
 
-  const removeCartItem = async (itemId: number) => {
-    const data = await apiRequest<CartState>(`/api/cart/items/${itemId}`, {
-      method: 'DELETE',
+  const removeCartItem = async (itemId: string) => {
+    setCartEntries((prev) => {
+      const next = prev.filter((e) => e.id !== itemId);
+      savePersistedCart(next);
+      return next;
     });
-    setCart(data);
   };
+
+  const clearCart = useCallback(() => {
+    setCartEntries([]);
+    savePersistedCart([]);
+    setAppliedCouponCode('');
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(COUPON_STORAGE_KEY);
+    }
+  }, []);
 
   const applyCoupon = async (code: string) => {
-    const data = await apiRequest<CartState>('/api/cart/coupon', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
-    setCart(data);
+    const clean = code.trim().toUpperCase();
+    const list = coupons.length ? coupons : await fetchActiveCoupons();
+    const found = list.find((c) => c.isActive && c.code.toUpperCase() === clean);
+    if (!found) {
+      throw new Error('Invalid or expired coupon code.');
+    }
+    if (cart.subtotal < found.minOrderAmount) {
+      throw new Error(`Minimum order of ₹${found.minOrderAmount} required for ${found.code}.`);
+    }
+    setCoupons(list);
+    setAppliedCouponCode(found.code);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(COUPON_STORAGE_KEY, found.code);
+    }
     notify(lang === 'hi' ? 'कूपन लागू हो गया।' : 'Coupon applied successfully.', 'success');
   };
 
   const removeCoupon = async () => {
-    const data = await apiRequest<CartState>('/api/cart/coupon', {
-      method: 'DELETE',
-    });
-    setCart(data);
+    setAppliedCouponCode('');
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(COUPON_STORAGE_KEY);
+    }
   };
 
-  const toggleWishlist = async (productId: number) => {
+  const toggleWishlist = async (productId: string) => {
     if (!user) {
       notify(
         lang === 'hi'
@@ -285,15 +534,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       );
       return;
     }
-    const res = await apiRequest<{ wishlisted: boolean }>('/api/wishlist/toggle', {
-      method: 'POST',
-      body: JSON.stringify({ productId }),
-    });
+    const wishlisted = await toggleWishlistDoc(user.uid, productId);
     setWishlistIds((prev) =>
-      res.wishlisted ? Array.from(new Set([...prev, productId])) : prev.filter((id) => id !== productId)
+      wishlisted ? Array.from(new Set([...prev, productId])) : prev.filter((id) => id !== productId)
     );
     notify(
-      res.wishlisted
+      wishlisted
         ? lang === 'hi'
           ? 'विशलिस्ट में सहेजा गया।'
           : 'Saved to your wishlist.'
@@ -314,6 +560,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         authLoading,
         loginWithEmail,
         registerWithEmail,
+        sendPasswordReset,
         loginWithGoogle,
         logout,
         refreshAuth,
@@ -323,6 +570,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         addToCart,
         updateCartItem,
         removeCartItem,
+        clearCart,
         applyCoupon,
         removeCoupon,
         refreshCart,
