@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
-import { Heart, KeyRound, LogOut, Package, Shield, User as UserIcon } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import {
+  CheckCircle2,
+  ExternalLink,
+  Heart,
+  KeyRound,
+  LogOut,
+  Mail,
+  MessageCircle,
+  Package,
+  Shield,
+  Smartphone,
+  User as UserIcon,
+} from 'lucide-react';
+import { useStore, type WhatsAppOtpRequestResult } from '../context/StoreContext';
 import { auth } from '../lib/firebase';
 import { formatINR } from '../lib/api';
 import { fetchMyOrders, updateUserProfileDoc } from '../lib/firestoreStore';
@@ -14,21 +26,37 @@ import type { Order, Product } from '../types';
 export function LoginPage() {
   const {
     user,
+    lang,
     loginWithEmail,
     registerWithEmail,
     sendPasswordReset,
     loginWithGoogle,
+    requestWhatsAppOtp,
+    verifyWhatsAppOtp,
     t,
     notify,
   } = useStore();
   const navigate = useNavigate();
+
+  // Channel: WhatsApp (default prominent) or Email
+  const [channel, setChannel] = useState<'whatsapp' | 'email'>('whatsapp');
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
+
+  // Email states
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+
+  // WhatsApp OTP states
+  const [waPhone, setWaPhone] = useState('');
+  const [waName, setWaName] = useState('');
+  const [waCode, setWaCode] = useState('');
+  const [waOtpMeta, setWaOtpMeta] = useState<WhatsAppOtpRequestResult | null>(null);
+  const [waCooldown, setWaCooldown] = useState(0);
+
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -36,7 +64,57 @@ export function LoginPage() {
     }
   }, [user, navigate]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (waCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setWaCooldown((s) => (s > 1 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [waCooldown]);
+
+  const handleRequestWhatsAppOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const res = await requestWhatsAppOtp({
+        phone: waPhone.trim(),
+        fullName: mode === 'register' ? waName.trim() : undefined,
+        mode: mode === 'register' ? 'signup' : 'login',
+      });
+      setWaOtpMeta(res);
+      setWaCooldown(30);
+      notify(
+        res.deliveryMode === 'whatsapp_cloud_api'
+          ? 'Verification code sent to your WhatsApp!'
+          : 'WhatsApp verification code ready! Verify below or confirm on WhatsApp.',
+        'success'
+      );
+    } catch (err: any) {
+      notify(err?.message || 'Unable to generate WhatsApp code.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyWhatsAppOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const u = await verifyWhatsAppOtp({
+        phone: waOtpMeta?.phone || waPhone.trim(),
+        code: waCode.trim(),
+        fullName: mode === 'register' ? waName.trim() : undefined,
+      });
+      notify(`Welcome, ${u.fullName}! Signed in with WhatsApp.`, 'success');
+      navigate('/account');
+    } catch (err: any) {
+      notify(err?.message || 'WhatsApp verification failed.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setLoading(true);
@@ -78,34 +156,46 @@ export function LoginPage() {
   return (
     <>
       <SEO
-        title="Sign In or Create Account | ZARIFLY Boutique"
-        description="Sign in to your ZARIFLY boutique account with Firebase Authentication to manage orders, wishlist, saved addresses, and genuine product reviews."
+        title="WhatsApp Login & Account | ZARIFLY Boutique"
+        description="Sign in or sign up instantly with WhatsApp, Google, or Email on ZARIFLY Boutique to order handcrafted hijabs, naqaabs, and dupattas with Cash on Delivery."
         canonicalPath="/login"
       />
 
-      <div className="min-h-[75vh] bg-gradient-to-br from-[#FFF0F6] via-[#F3EEFF] to-[#ECFEFF] flex items-center justify-center px-4 py-14">
-        <div className="w-full max-w-md bg-white rounded-[32px] border border-[#E9DDFC] p-8 sm:p-10 space-y-6 shadow-[0_20px_55px_rgba(124,58,237,0.12)]">
-          <div className="text-center space-y-3">
+      <div className="min-h-[75vh] bg-gradient-to-br from-[#FFF0F6] via-[#F3EEFF] to-[#ECFEFF] flex items-center justify-center px-4 py-12 sm:py-16">
+        <div className="w-full max-w-md bg-white rounded-[32px] border border-[#E9DDFC] p-7 sm:p-10 space-y-6 shadow-[0_20px_55px_rgba(124,58,237,0.12)]">
+          <div className="text-center space-y-2.5">
             <div className="flex justify-center">
               <ZariflyLogo size="lg" />
             </div>
             <h1 className="font-serif-display text-3xl font-extrabold text-[#181326]">
-              {mode === 'login'
-                ? t('auth.signIn')
+              {mode === 'reset'
+                ? 'Reset Password'
                 : mode === 'register'
-                  ? t('auth.register')
-                  : 'Reset Password'}
+                  ? lang === 'hi'
+                    ? 'नया अकाउंट बनाएं'
+                    : 'Create Your Account'
+                  : lang === 'hi'
+                    ? 'ZARIFLY में लॉग इन करें'
+                    : 'Welcome Back'}
             </h1>
+            <p className="text-xs text-[#64597A]">
+              {lang === 'hi'
+                ? 'WhatsApp, Google या Email से तुरंत साइन इन / साइन अप करें।'
+                : 'Sign in or sign up instantly with WhatsApp, Google, or Email.'}
+            </p>
           </div>
 
           {mode !== 'reset' && (
             <>
+              {/* Login / Sign Up Switch */}
               <div className="grid grid-cols-2 rounded-full bg-[#FAFAFF] border border-[#E2D9F3] p-1 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => {
                     setMode('login');
                     setResetSent(false);
+                    setWaOtpMeta(null);
+                    setWaCode('');
                   }}
                   className={`py-2.5 rounded-full transition-all cursor-pointer ${
                     mode === 'login'
@@ -120,6 +210,8 @@ export function LoginPage() {
                   onClick={() => {
                     setMode('register');
                     setResetSent(false);
+                    setWaOtpMeta(null);
+                    setWaCode('');
                   }}
                   className={`py-2.5 rounded-full transition-all cursor-pointer ${
                     mode === 'register'
@@ -131,31 +223,199 @@ export function LoginPage() {
                 </button>
               </div>
 
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleGoogle}
-                className="w-full py-3.5 px-4 rounded-full border-2 border-[#181326] bg-white text-[#181326] text-xs font-extrabold tracking-wider uppercase hover:bg-[#F3EEFF] hover:border-[#7C3AED] transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
-              >
-                <span>{t('auth.googleSignIn')}</span>
-              </button>
-
-              <div className="relative flex items-center py-1">
-                <div className="flex-grow border-t border-[#EDE8F7]" />
-                <span className="shrink mx-3 text-[11px] text-[#8B7FA6] uppercase font-bold">
-                  or email
-                </span>
-                <div className="flex-grow border-t border-[#EDE8F7]" />
+              {/* Channel Switch: WhatsApp vs Email */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChannel('whatsapp');
+                    setResetSent(false);
+                  }}
+                  className={`py-3 px-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 border-2 transition-all cursor-pointer ${
+                    channel === 'whatsapp'
+                      ? 'bg-[#ECFDF5] border-[#25D366] text-[#047857] shadow-xs'
+                      : 'bg-white border-[#EDE8F7] text-[#64597A] hover:border-[#25D366]/50'
+                  }`}
+                >
+                  <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChannel('email')}
+                  className={`py-3 px-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 border-2 transition-all cursor-pointer ${
+                    channel === 'email'
+                      ? 'bg-[#F3EEFF] border-[#7C3AED] text-[#5B21B6] shadow-xs'
+                      : 'bg-white border-[#EDE8F7] text-[#64597A] hover:border-[#7C3AED]/50'
+                  }`}
+                >
+                  <Mail className="w-4 h-4 text-[#7C3AED]" />
+                  <span>Email</span>
+                </button>
               </div>
             </>
           )}
 
-          {mode === 'reset' && resetSent ? (
+          {/* WHATSAPP LOGIN / SIGNUP FLOW */}
+          {channel === 'whatsapp' && mode !== 'reset' ? (
+            <div className="space-y-4">
+              {!waOtpMeta ? (
+                <form onSubmit={handleRequestWhatsAppOtp} className="space-y-4">
+                  {mode === 'register' && (
+                    <div>
+                      <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                        {t('auth.fullName')} *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        minLength={2}
+                        placeholder="e.g. Ayesha Khan"
+                        value={waName}
+                        onChange={(e) => setWaName(e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                      WhatsApp Mobile Number *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3.5 py-3 rounded-2xl text-sm font-bold bg-[#ECFDF5] border border-[#A7F3D0] text-[#047857] tabular-nums">
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        required
+                        inputMode="numeric"
+                        placeholder="98XXXXXXXX"
+                        value={waPhone}
+                        onChange={(e) => setWaPhone(e.target.value.replace(/[^\d+\s-]/g, ''))}
+                        className={`${inputClass} tabular-nums`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-[#64597A] mt-1.5">
+                      {mode === 'register'
+                        ? 'Create your ZARIFLY account in seconds with a 6-digit WhatsApp verification code.'
+                        : 'Get a 6-digit WhatsApp verification code to sign in instantly.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-4 rounded-full bg-[#25D366] hover:bg-[#1FB858] text-white text-xs font-extrabold uppercase tracking-[0.12em] flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-[0_10px_24px_rgba(37,211,102,0.32)] cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>
+                      {loading
+                        ? t('common.loading')
+                        : mode === 'register'
+                          ? 'Sign Up with WhatsApp'
+                          : 'Continue with WhatsApp'}
+                    </span>
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyWhatsAppOtp} className="space-y-4">
+                  <div className="rounded-2xl bg-[#ECFDF5] border border-[#A7F3D0] p-4 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#047857]">
+                        <Smartphone className="w-4 h-4" />
+                        {waOtpMeta.phone}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWaOtpMeta(null);
+                          setWaCode('');
+                        }}
+                        className="text-[11px] font-bold text-[#047857] underline cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+
+                    {waOtpMeta.verificationCode && (
+                      <div className="rounded-xl bg-white border border-[#A7F3D0] p-3 flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#64597A]">
+                            Your 6-Digit WhatsApp Code
+                          </p>
+                          <p className="text-xl font-extrabold tracking-[0.22em] text-[#181326] tabular-nums">
+                            {waOtpMeta.verificationCode}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setWaCode(waOtpMeta.verificationCode || '')}
+                          className="px-3.5 py-2 rounded-full bg-[#25D366] text-white text-[11px] font-extrabold uppercase tracking-wider hover:brightness-105 cursor-pointer"
+                        >
+                          Autofill
+                        </button>
+                      </div>
+                    )}
+
+                    <a
+                      href={waOtpMeta.whatsappUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-2.5 px-4 rounded-xl bg-white border border-[#25D366] text-[#047857] text-xs font-extrabold flex items-center justify-center gap-1.5 hover:bg-[#25D366] hover:text-white transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Open WhatsApp Chat</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#5E5474] mb-1">
+                      Enter 6-Digit Verification Code *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="• • • • • •"
+                      value={waCode}
+                      onChange={(e) => setWaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className={`${inputClass} text-center text-lg font-extrabold tracking-[0.35em] tabular-nums`}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || waCode.length !== 6}
+                    className="w-full py-4 rounded-full bg-gradient-to-r from-[#25D366] to-[#10B981] text-white text-xs font-extrabold uppercase tracking-[0.14em] hover:brightness-105 transition-all disabled:opacity-50 shadow-md cursor-pointer"
+                  >
+                    {loading ? t('common.loading') : 'Verify & Continue'}
+                  </button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      disabled={waCooldown > 0 || loading}
+                      onClick={(e) => handleRequestWhatsAppOtp(e as any)}
+                      className="text-xs font-bold text-[#7C3AED] hover:text-[#FF4D8D] disabled:opacity-50 cursor-pointer"
+                    >
+                      {waCooldown > 0
+                        ? `Resend code in ${waCooldown}s`
+                        : 'Resend WhatsApp Code'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          ) : mode === 'reset' && resetSent ? (
             <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-3">
               <KeyRound className="w-8 h-8 text-emerald-600 mx-auto" />
               <p className="text-sm font-semibold text-[#181326]">Password Reset Email Sent</p>
               <p className="text-xs text-[#5E5474]">
-                Check <strong>{email}</strong> for a Firebase password reset link, then sign in with your new password.
+                Check <strong>{email}</strong> for a Firebase password reset link, then sign in with
+                your new password.
               </p>
               <button
                 type="button"
@@ -169,7 +429,7 @@ export function LoginPage() {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
               {mode === 'register' && (
                 <>
                   <div>
@@ -263,6 +523,27 @@ export function LoginPage() {
               )}
             </form>
           )}
+
+          {mode !== 'reset' && (
+            <>
+              <div className="relative flex items-center py-0.5">
+                <div className="flex-grow border-t border-[#EDE8F7]" />
+                <span className="shrink mx-3 text-[11px] text-[#8B7FA6] uppercase font-bold">
+                  or continue with
+                </span>
+                <div className="flex-grow border-t border-[#EDE8F7]" />
+              </div>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleGoogle}
+                className="w-full py-3.5 px-4 rounded-full border-2 border-[#181326] bg-white text-[#181326] text-xs font-extrabold tracking-wider uppercase hover:bg-[#F3EEFF] hover:border-[#7C3AED] transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <span>{t('auth.googleSignIn')}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -270,7 +551,8 @@ export function LoginPage() {
 }
 
 export function AccountPage() {
-  const { user, authLoading, lang, logout, refreshAuth, t, notify } = useStore();
+  const { user, authLoading, lang, logout, refreshAuth, updateWhatsAppProfile, t, notify } =
+    useStore();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [fullName, setFullName] = useState('');
@@ -298,15 +580,22 @@ export function AccountPage() {
     if (!user) return;
     try {
       setSaving(true);
-      await updateUserProfileDoc(user.uid, {
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        preferredLang: lang,
-      });
-      if (auth.currentUser && fullName.trim()) {
-        await updateProfile(auth.currentUser, { displayName: fullName.trim() }).catch(() => {});
+      if (user.authProvider === 'whatsapp' || !auth.currentUser) {
+        await updateWhatsAppProfile({
+          fullName: fullName.trim(),
+          preferredLang: lang,
+        });
+      } else {
+        await updateUserProfileDoc(user.uid, {
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          preferredLang: lang,
+        });
+        if (auth.currentUser && fullName.trim()) {
+          await updateProfile(auth.currentUser, { displayName: fullName.trim() }).catch(() => {});
+        }
+        await refreshAuth();
       }
-      await refreshAuth();
       notify('Profile updated.', 'success');
     } catch (err: any) {
       notify(err?.message || 'Unable to update profile.', 'error');
@@ -317,6 +606,7 @@ export function AccountPage() {
 
   if (!user) return null;
   const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+  const isWhatsAppUser = user.authProvider === 'whatsapp';
 
   return (
     <>
@@ -329,13 +619,23 @@ export function AccountPage() {
       <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-10 sm:py-14 space-y-10">
         <div className="rounded-[30px] bg-gradient-to-r from-[#FFF0F6] via-[#F3EEFF] to-[#ECFEFF] border border-[#E9DDFC] p-6 sm:p-8 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-extrabold tracking-[0.18em] uppercase text-[#FF4D8D]">
-              Member Profile
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-extrabold tracking-[0.18em] uppercase text-[#FF4D8D]">
+                Member Profile
+              </p>
+              {isWhatsAppUser && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#ECFDF5] border border-[#A7F3D0] text-[10px] font-extrabold text-[#047857]">
+                  <CheckCircle2 className="w-3 h-3 text-[#25D366]" />
+                  WhatsApp Verified
+                </span>
+              )}
+            </div>
             <h1 className="font-serif-display text-3xl sm:text-5xl font-extrabold text-[#181326] mt-1">
               {user.fullName}
             </h1>
-            <p className="text-xs text-[#64597A] mt-1">{user.email}</p>
+            <p className="text-xs text-[#64597A] mt-1">
+              {isWhatsAppUser ? user.phone : user.email}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {isAdmin && (
@@ -381,13 +681,14 @@ export function AccountPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-[#5E5474] mb-1">
-                {t('auth.phone')}
+                {isWhatsAppUser ? 'Verified WhatsApp Number' : t('auth.phone')}
               </label>
               <input
                 type="tel"
                 value={phone}
+                disabled={isWhatsAppUser}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl text-sm bg-[#FAFAFF] border border-[#E2D9F3] outline-none focus:border-[#7C3AED]"
+                className="w-full px-4 py-3 rounded-2xl text-sm bg-[#FAFAFF] border border-[#E2D9F3] outline-none focus:border-[#7C3AED] disabled:opacity-65"
               />
             </div>
             <button
@@ -491,7 +792,7 @@ export function WishlistPage() {
               <Heart className="w-7 h-7 text-[#FF4D8D]" />
             </div>
             <p className="text-sm text-[#64597A]">
-              Sign in to access your saved wishlist across devices.
+              Sign in with WhatsApp or Google to access your saved wishlist.
             </p>
             <Link
               to="/login"

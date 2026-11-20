@@ -17,6 +17,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
 import { subscribeNewsletter } from '../lib/firestoreStore';
+import { CATALOG_IMAGES } from '../lib/defaultCatalog';
 import { FOUNDER_SOCIALS, OFFICIAL_FOUNDER_PORTRAIT } from '../lib/brandAssets';
 import { SEO } from '../components/SEO';
 import { ProductCard } from '../components/ProductCard';
@@ -203,7 +204,7 @@ export function HomePage() {
         title="ZARIFLY — Modern Modest Fashion, Handcrafted Hijabs, Naqaabs & Dupattas"
         description="Shop colourful handcrafted Zari, Zardozi, and Nakashi embroidered hijabs, breathable Korean Nidha naqaabs, and designer dupattas by Sama Shaikh."
         canonicalPath="/"
-        image="/src/assets/images/hero_zari_hijab_1795097056066.jpg"
+        image={CATALOG_IMAGES.heroHijab}
       />
 
       {/* SECTION A: SLIM ULTRA-COMPACT TOP BANNER SLIDER (~100x400 WIDE STRIP FEEL) */}
@@ -216,7 +217,7 @@ export function HomePage() {
             onTouchEnd={handleHeroTouchEnd}
             className="relative w-full h-[112px] sm:h-[148px] lg:h-[178px] rounded-[20px] sm:rounded-[26px] bg-gradient-to-r from-[#181326] via-[#4C1D95] to-[#BE185D] overflow-hidden shadow-[0_12px_32px_rgba(124,58,237,0.18)]"
           >
-            {bootstrapLoading || !currentBanner ? (
+            {!currentBanner ? (
               <div className="w-full h-full animate-pulse bg-gradient-to-r from-[#7C3AED]/40 via-[#FF4D8D]/40 to-[#06B6D4]/40" />
             ) : (
               <AnimatePresence mode="wait">
@@ -461,7 +462,7 @@ export function HomePage() {
             </div>
           </div>
 
-          {bootstrapLoading ? (
+          {bootstrapLoading && displayedTrending.length === 0 ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-6">
               {[1, 2, 3, 4].map((n) => (
                 <div
@@ -546,7 +547,7 @@ export function HomePage() {
             >
               <div className="relative rounded-[30px] overflow-hidden shadow-[0_24px_60px_rgba(124,58,237,0.16)] border-4 border-white aspect-[4/3]">
                 <img
-                  src="/src/assets/images/craft_zardozi_macro_1795097056186.jpg"
+                  src={CATALOG_IMAGES.craftMacro}
                   alt="Zarifly Signature Zari and Zardozi hand embroidery detail"
                   loading="lazy"
                   referrerPolicy="no-referrer"
@@ -563,7 +564,7 @@ export function HomePage() {
                 className="absolute -bottom-2 right-3 sm:right-6 w-36 sm:w-48 aspect-square rounded-[24px] overflow-hidden border-4 border-white shadow-[0_18px_40px_rgba(255,77,141,0.22)] bg-[#FFF0F6]"
               >
                 <img
-                  src="/src/assets/images/prod_dupatta_rose_nakashi_1795097080211.jpg"
+                  src={CATALOG_IMAGES.dupattaRose}
                   alt="Rose Nakashi Designer Dupatta"
                   loading="lazy"
                   referrerPolicy="no-referrer"

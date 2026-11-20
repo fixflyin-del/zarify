@@ -15,8 +15,7 @@ interface ShopPageProps {
 export function ShopPage({ collectionSlug }: ShopPageProps) {
   const { lang, t, bootstrap } = useStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [liveProducts, setLiveProducts] = useState<Product[] | null>(null);
 
   const search = searchParams.get('search') || '';
   const sort = searchParams.get('sort') || 'newest';
@@ -27,55 +26,59 @@ export function ShopPage({ collectionSlug }: ShopPageProps) {
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
-      try {
-        setLoading(true);
-        const { products: allProducts } = await fetchAllProductsEnriched({
-          includeInactive: false,
-          includeAllReviews: false,
-        });
-        if (!active) return;
-
-        let list = [...(allProducts.length ? allProducts : DEFAULT_PRODUCTS)];
-        if (activeCategory && activeCategory !== 'all') {
-          list = list.filter(
-            (p) => p.category?.slug === activeCategory || p.categorySlug === activeCategory
-          );
+    fetchAllProductsEnriched({
+      includeInactive: false,
+      includeAllReviews: false,
+    })
+      .then(({ products: allProducts }) => {
+        if (active && allProducts.length > 0) {
+          setLiveProducts(allProducts);
         }
-        if (search) {
-          const q = search.toLowerCase();
-          list = list.filter(
-            (p) =>
-              p.name.toLowerCase().includes(q) ||
-              (p.nameHi || '').toLowerCase().includes(q) ||
-              p.description.toLowerCase().includes(q) ||
-              p.fabric.toLowerCase().includes(q)
-          );
-        }
-        if (maxPrice && !Number.isNaN(Number(maxPrice))) {
-          list = list.filter((p) => p.sellingPrice <= Number(maxPrice));
-        }
-        if (searchParams.get('newArrival') === 'true') {
-          list = list.filter((p) => p.isNewArrival);
-        }
-        if (sort === 'price_asc') list.sort((a, b) => a.sellingPrice - b.sellingPrice);
-        else if (sort === 'price_desc') list.sort((a, b) => b.sellingPrice - a.sellingPrice);
-        else if (sort === 'bestselling') {
-          list.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
-        }
-        setProducts(list);
-      } catch (err) {
-        console.error('Shop Firestore load error:', err);
-        if (active) setProducts(DEFAULT_PRODUCTS);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    load();
+      })
+      .catch(() => {
+        // Keep bootstrap / starter catalog seamlessly
+      });
     return () => {
       active = false;
     };
-  }, [activeCategory, search, sort, maxPrice, searchParams]);
+  }, []);
+
+  const baseProducts =
+    liveProducts && liveProducts.length > 0
+      ? liveProducts
+      : bootstrap?.allProducts?.length
+        ? bootstrap.allProducts
+        : DEFAULT_PRODUCTS;
+
+  let products = [...baseProducts];
+  if (activeCategory && activeCategory !== 'all') {
+    products = products.filter(
+      (p) => p.category?.slug === activeCategory || p.categorySlug === activeCategory
+    );
+  }
+  if (search) {
+    const q = search.toLowerCase();
+    products = products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.nameHi || '').toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.fabric.toLowerCase().includes(q)
+    );
+  }
+  if (maxPrice && !Number.isNaN(Number(maxPrice))) {
+    products = products.filter((p) => p.sellingPrice <= Number(maxPrice));
+  }
+  if (searchParams.get('newArrival') === 'true') {
+    products = products.filter((p) => p.isNewArrival);
+  }
+  if (sort === 'price_asc') products.sort((a, b) => a.sellingPrice - b.sellingPrice);
+  else if (sort === 'price_desc') products.sort((a, b) => b.sellingPrice - a.sellingPrice);
+  else if (sort === 'bestselling') {
+    products.sort((a, b) => Number(b.isBestSeller) - Number(a.isBestSeller));
+  }
+
+  const loading = false;
 
   const pageHeading = currentCatObj
     ? lang === 'hi' && currentCatObj.nameHi

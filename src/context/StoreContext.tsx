@@ -36,6 +36,16 @@ import type {
 
 const CART_STORAGE_KEY = 'zarifly_firebase_cart_v1';
 const COUPON_STORAGE_KEY = 'zarifly_firebase_coupon_v1';
+const WA_WISHLIST_STORAGE_KEY = 'zarifly_wa_wishlist_v1';
+
+export interface WhatsAppOtpRequestResult {
+  ok: boolean;
+  phone: string;
+  expiresInSeconds: number;
+  deliveryMode: 'whatsapp_cloud_api' | 'whatsapp_direct';
+  whatsappUrl: string;
+  verificationCode?: string;
+}
 
 interface PersistedCartEntry {
   id: string;
@@ -78,6 +88,20 @@ interface StoreContextValue {
   }) => Promise<User>;
   sendPasswordReset: (email: string) => Promise<void>;
   loginWithGoogle: () => Promise<User>;
+  requestWhatsAppOtp: (payload: {
+    phone: string;
+    fullName?: string;
+    mode: 'login' | 'signup';
+  }) => Promise<WhatsAppOtpRequestResult>;
+  verifyWhatsAppOtp: (payload: {
+    phone: string;
+    code: string;
+    fullName?: string;
+  }) => Promise<User>;
+  updateWhatsAppProfile: (payload: {
+    fullName: string;
+    preferredLang: Language;
+  }) => Promise<User>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   cart: CartState;
@@ -171,7 +195,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     ...DEFAULT_BOOTSTRAP,
     allProducts: DEFAULT_PRODUCTS,
   });
-  const [bootstrapLoading, setBootstrapLoading] = useState(true);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -200,7 +224,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBootstrap = useCallback(async () => {
     try {
-      setBootstrapLoading(true);
       const [data, activeCoupons] = await Promise.all([
         fetchStorefrontBootstrap(),
         fetchActiveCoupons(),
@@ -215,17 +238,45 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loadLocalWhatsAppWishlist = useCallback((): string[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(WA_WISHLIST_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const restoreWhatsAppSession = useCallback(async (): Promise<User | null> => {
+    try {
+      const data = await apiRequest<{ user: User | null }>('/api/whatsapp-auth/me');
+      if (data?.user) {
+        setUser(data.user);
+        setWishlistIds(loadLocalWhatsAppWishlist());
+        return data.user;
+      }
+    } catch {
+      // Ignore if WhatsApp session endpoint unavailable
+    }
+    return null;
+  }, [loadLocalWhatsAppWishlist]);
+
   const refreshAuth = useCallback(async () => {
     const fbUser = auth.currentUser;
     if (!fbUser) {
-      setUser(null);
-      setWishlistIds([]);
+      const waUser = await restoreWhatsAppSession();
+      if (!waUser) {
+        setUser(null);
+        setWishlistIds([]);
+      }
       setAuthLoading(false);
       return;
     }
     try {
       const profile = await ensureUserProfile(fbUser);
-      setUser(profile);
+      setUser({ ...profile, authProvider: 'firebase' });
       const wl = await fetchUserWishlistIds(fbUser.uid).catch(() => []);
       setWishlistIds(wl);
     } catch {
@@ -234,7 +285,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setAuthLoading(false);
     }
-  }, []);
+  }, [restoreWhatsAppSession]);
 
   useEffect(() => {
     void refreshBootstrap();
@@ -243,14 +294,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) {
-        setUser(null);
-        setWishlistIds([]);
+        const waUser = await restoreWhatsAppSession();
+        if (!waUser) {
+          setUser(null);
+          setWishlistIds([]);
+        }
         setAuthLoading(false);
         return;
       }
       try {
         const profile = await ensureUserProfile(fbUser);
-        setUser(profile);
+        setUser({ ...profile, authProvider: 'firebase' });
         const wl = await fetchUserWishlistIds(fbUser.uid).catch(() => []);
         setWishlistIds(wl);
       } catch (err) {
@@ -263,13 +317,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           phone: '',
           role: 'customer',
           preferredLang: lang,
+          authProvider: 'firebase',
         });
       } finally {
         setAuthLoading(false);
       }
     });
     return () => unsub();
-  }, [lang]);
+  }, [lang, restoreWhatsAppSession]);
 
   // Compute live cart state from persisted entries + live Firestore products/settings/coupons
   const cart: CartState = useMemo(() => {
@@ -426,10 +481,49 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const requestWhatsAppOtp = async (payload: {
+    phone: string;
+    fullName?: string;
+    mode: 'login' | 'signup';
+  }) => {
+    return apiRequest<WhatsAppOtpRequestResult>('/api/whatsapp-auth/request-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const verifyWhatsAppOtp = async (payload: {
+    phone: string;
+    code: string;
+    fullName?: string;
+  }) => {
+    const data = await apiRequest<{ ok: boolean; user: User }>('/api/whatsapp-auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data?.user) throw new Error('WhatsApp verification failed.');
+    setUser(data.user);
+    setWishlistIds(loadLocalWhatsAppWishlist());
+    return data.user;
+  };
+
+  const updateWhatsAppProfile = async (payload: {
+    fullName: string;
+    preferredLang: Language;
+  }) => {
+    const data = await apiRequest<{ ok: boolean; user: User }>('/api/whatsapp-auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    if (data?.user) setUser(data.user);
+    return data.user;
+  };
+
   const logout = async () => {
     try {
       await apiRequest('/api/admin-security/lock', { method: 'POST' }).catch(() => {});
-      await firebaseSignOut(auth);
+      await apiRequest('/api/whatsapp-auth/logout', { method: 'POST' }).catch(() => {});
+      await firebaseSignOut(auth).catch(() => {});
     } finally {
       setUser(null);
       setWishlistIds([]);
@@ -528,12 +622,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       notify(
         lang === 'hi'
-          ? 'विशलिस्ट सहेजने के लिए कृपया साइन इन करें।'
-          : 'Please sign in to save pieces to your wishlist.',
+          ? 'विशलिस्ट सहेजने के लिए कृपया WhatsApp या Google से साइन इन करें।'
+          : 'Please sign in with WhatsApp or Google to save pieces to your wishlist.',
         'info'
       );
       return;
     }
+
+    if (user.authProvider === 'whatsapp' || !auth.currentUser) {
+      const exists = wishlistIds.includes(productId);
+      const next = exists
+        ? wishlistIds.filter((id) => id !== productId)
+        : Array.from(new Set([...wishlistIds, productId]));
+      setWishlistIds(next);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(WA_WISHLIST_STORAGE_KEY, JSON.stringify(next));
+      }
+      notify(
+        !exists
+          ? lang === 'hi'
+            ? 'विशलिस्ट में सहेजा गया।'
+            : 'Saved to your wishlist.'
+          : lang === 'hi'
+            ? 'विशलिस्ट से हटाया गया।'
+            : 'Removed from wishlist.',
+        'success'
+      );
+      return;
+    }
+
     const wishlisted = await toggleWishlistDoc(user.uid, productId);
     setWishlistIds((prev) =>
       wishlisted ? Array.from(new Set([...prev, productId])) : prev.filter((id) => id !== productId)
@@ -562,6 +679,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         registerWithEmail,
         sendPasswordReset,
         loginWithGoogle,
+        requestWhatsAppOtp,
+        verifyWhatsAppOtp,
+        updateWhatsAppProfile,
         logout,
         refreshAuth,
         cart,

@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import adminPinRouter from './routes/adminPin.ts';
 import utilitiesRouter from './routes/utilities.ts';
+import whatsappAuthRouter from './routes/whatsappAuth.ts';
 
 export function createExpressApp() {
   const app = express();
@@ -29,8 +30,9 @@ export function createExpressApp() {
   });
   app.use('/api', apiLimiter);
 
-  // Firebase-verified Admin PIN gate + utility endpoints
+  // Firebase-verified Admin PIN gate, WhatsApp Auth & utility endpoints
   app.use('/api/admin-security', adminPinRouter);
+  app.use('/api/whatsapp-auth', whatsappAuthRouter);
   app.use('/api', utilitiesRouter);
 
   // Dynamic robots.txt

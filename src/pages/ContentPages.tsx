@@ -13,6 +13,7 @@ import { motion } from 'motion/react';
 import { useStore } from '../context/StoreContext';
 import { submitContactMessage } from '../lib/firestoreStore';
 import { FOUNDER_SOCIALS, OFFICIAL_FOUNDER_PORTRAIT } from '../lib/brandAssets';
+import { CATALOG_IMAGES } from '../lib/defaultCatalog';
 import { SEO } from '../components/SEO';
 
 export function AboutPage() {
@@ -43,7 +44,7 @@ export function AboutPage() {
 
         <div className="aspect-[16/9] rounded-[34px] bg-[#F3EEFF] border-4 border-white shadow-[0_20px_50px_rgba(124,58,237,0.12)] overflow-hidden">
           <img
-            src="/src/assets/images/craft_zardozi_macro_1795097056186.jpg"
+            src={CATALOG_IMAGES.craftMacro}
             alt="ZARIFLY Zardozi and Nakashi embroidery artistry"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"

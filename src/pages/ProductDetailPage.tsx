@@ -28,19 +28,40 @@ const RECENTLY_VIEWED_KEY = 'zarifly_recently_viewed';
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { lang, t, user, wishlistIds, toggleWishlist, addToCart, notify } = useStore();
+  const { lang, t, user, bootstrap, wishlistIds, toggleWishlist, addToCart, notify } = useStore();
 
-  const [product, setProduct] = useState<Product | null>(null);
+  const initialSource = bootstrap?.allProducts?.length ? bootstrap.allProducts : DEFAULT_PRODUCTS;
+  const immediateProduct = slug
+    ? initialSource.find((p) => p.slug === slug || p.id === slug) || null
+    : null;
+
+  const [product, setProduct] = useState<Product | null>(immediateProduct);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [distribution, setDistribution] = useState<Array<{ star: number; count: number }>>([]);
-  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [distribution, setDistribution] = useState<Array<{ star: number; count: number }>>(
+    [5, 4, 3, 2, 1].map((star) => ({ star, count: 0 }))
+  );
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>(
+    immediateProduct
+      ? initialSource
+          .filter((p) => p.categoryId === immediateProduct.categoryId && p.id !== immediateProduct.id)
+          .slice(0, 4)
+      : []
+  );
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!immediateProduct);
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [zoomOrigin, setZoomOrigin] = useState<{ x: number; y: number } | null>(null);
-  const [selectedColor, setSelectedColor] = useState('');
-  const [selectedSize, setSelectedSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState(
+    immediateProduct?.variants.find((v) => v.stockQuantity > 0)?.colorName ||
+      immediateProduct?.variants[0]?.colorName ||
+      ''
+  );
+  const [selectedSize, setSelectedSize] = useState(
+    immediateProduct?.variants.find((v) => v.stockQuantity > 0)?.sizeName ||
+      immediateProduct?.variants[0]?.sizeName ||
+      ''
+  );
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<string>('details');
@@ -64,13 +85,31 @@ export function ProductDetailPage() {
   useEffect(() => {
     if (!slug) return;
     let active = true;
+
+    const sourcePool = bootstrap?.allProducts?.length ? bootstrap.allProducts : DEFAULT_PRODUCTS;
+    const instant = sourcePool.find((p) => p.slug === slug || p.id === slug) || null;
+    if (instant) {
+      setProduct(instant);
+      setLoading(false);
+      setActiveImageIdx(0);
+      setQuantity(1);
+      const defaultVar = instant.variants.find((v) => v.stockQuantity > 0) || instant.variants[0];
+      if (defaultVar) {
+        setSelectedColor(defaultVar.colorName);
+        setSelectedSize(defaultVar.sizeName);
+      }
+      setRelatedProducts(
+        sourcePool.filter((p) => p.categoryId === instant.categoryId && p.id !== instant.id).slice(0, 4)
+      );
+    }
+
     const load = async () => {
       try {
-        setLoading(true);
+        if (!instant) setLoading(true);
         const data = await fetchProductDetailBySlug(slug);
         if (!active) return;
         if (!data) {
-          setProduct(null);
+          if (!instant) setProduct(null);
           return;
         }
         const ratingDist = [5, 4, 3, 2, 1].map((star) => ({
@@ -81,14 +120,16 @@ export function ProductDetailPage() {
         setReviews(data.reviews || []);
         setDistribution(ratingDist);
         setRelatedProducts(data.related || []);
-        setActiveImageIdx(0);
-        setQuantity(1);
 
-        const defaultVar =
-          data.product.variants.find((v) => v.stockQuantity > 0) || data.product.variants[0];
-        if (defaultVar) {
-          setSelectedColor(defaultVar.colorName);
-          setSelectedSize(defaultVar.sizeName);
+        if (!instant) {
+          setActiveImageIdx(0);
+          setQuantity(1);
+          const defaultVar =
+            data.product.variants.find((v) => v.stockQuantity > 0) || data.product.variants[0];
+          if (defaultVar) {
+            setSelectedColor(defaultVar.colorName);
+            setSelectedSize(defaultVar.sizeName);
+          }
         }
 
         try {
@@ -101,25 +142,7 @@ export function ProductDetailPage() {
           // ignore storage errors
         }
       } catch {
-        if (active) {
-          const fallbackProd = DEFAULT_PRODUCTS.find((p) => p.slug === slug) || null;
-          setProduct(fallbackProd);
-          if (fallbackProd) {
-            const defaultVar =
-              fallbackProd.variants.find((v) => v.stockQuantity > 0) || fallbackProd.variants[0];
-            if (defaultVar) {
-              setSelectedColor(defaultVar.colorName);
-              setSelectedSize(defaultVar.sizeName);
-            }
-            setReviews([]);
-            setDistribution([5, 4, 3, 2, 1].map((star) => ({ star, count: 0 })));
-            setRelatedProducts(
-              DEFAULT_PRODUCTS.filter(
-                (p) => p.categoryId === fallbackProd.categoryId && p.id !== fallbackProd.id
-              ).slice(0, 4)
-            );
-          }
-        }
+        // Instant catalog already displayed
       } finally {
         if (active) setLoading(false);
       }
@@ -128,7 +151,7 @@ export function ProductDetailPage() {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, bootstrap?.allProducts]);
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Printer, Search, Truck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageCircle, Printer, Search, Truck } from 'lucide-react';
 import { formatINR } from '../lib/api';
 import { fetchOrderByNumberForUser, trackOrderPublic } from '../lib/firestoreStore';
 import { useStore } from '../context/StoreContext';
@@ -161,14 +161,27 @@ export function OrderConfirmationPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#EDE8F7]">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#F3EEFF] transition-colors cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                Print Invoice
-              </button>
+              <div className="flex flex-wrap gap-2.5">
+                <a
+                  href={`https://wa.me/919619586126?text=${encodeURIComponent(
+                    `Assalamu Alaikum ZARIFLY! I just placed a Cash on Delivery order:\nOrder #: ${order.orderNumber}\nName: ${order.customerName}\nPhone: ${order.customerPhone}\nTotal: ₹${order.grandTotal} (COD)\nItems: ${(order.items || []).map((i) => `${i.productName} (${i.colorName}, ${i.sizeName}) x${i.quantity}`).join(', ')}\nAddress: ${order.shippingAddressJson.houseFlat}, ${order.shippingAddressJson.streetArea}, ${order.shippingAddressJson.city} - ${order.shippingAddressJson.pincode}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[#25D366] text-white text-xs font-extrabold uppercase tracking-wider hover:brightness-105 transition-all shadow-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Confirm on WhatsApp
+                </a>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-[#181326] text-xs font-extrabold uppercase tracking-wider hover:bg-[#F3EEFF] transition-colors cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print Invoice
+                </button>
+              </div>
               <div className="flex gap-3">
                 <Link
                   to="/track-order"

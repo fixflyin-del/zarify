@@ -10,16 +10,47 @@ import type {
   StoreSettings,
 } from '../types';
 
-const IMG = {
-  heroHijab: '/src/assets/images/hero_zari_hijab_1795097056066.jpg',
-  heroDupatta: '/src/assets/images/hero_royal_dupatta_1795097060130.jpg',
-  catHijabs: '/src/assets/images/cat_premium_hijabs_1795097097750.jpg',
-  catNaqaabs: '/src/assets/images/cat_elegant_naqaabs_1795097086094.jpg',
-  catDupattas: '/src/assets/images/cat_designer_dupattas_1795097061115.jpg',
-  craftMacro: '/src/assets/images/craft_zardozi_macro_1795097056186.jpg',
-  hijabChocolate: '/src/assets/images/prod_hijab_chocolate_zari_1795097064655.jpg',
-  dupattaRose: '/src/assets/images/prod_dupatta_rose_nakashi_1795097080211.jpg',
+import heroHijabImg from '../assets/images/hero_zari_hijab_1795097056066.jpg';
+import heroDupattaImg from '../assets/images/hero_royal_dupatta_1795097060130.jpg';
+import catHijabsImg from '../assets/images/cat_premium_hijabs_1795097097750.jpg';
+import catNaqaabsImg from '../assets/images/cat_elegant_naqaabs_1795097086094.jpg';
+import catDupattasImg from '../assets/images/cat_designer_dupattas_1795097061115.jpg';
+import craftMacroImg from '../assets/images/craft_zardozi_macro_1795097056186.jpg';
+import hijabChocolateImg from '../assets/images/prod_hijab_chocolate_zari_1795097064655.jpg';
+import dupattaRoseImg from '../assets/images/prod_dupatta_rose_nakashi_1795097080211.jpg';
+
+export const CATALOG_IMAGES = {
+  heroHijab: heroHijabImg,
+  heroDupatta: heroDupattaImg,
+  catHijabs: catHijabsImg,
+  catNaqaabs: catNaqaabsImg,
+  catDupattas: catDupattasImg,
+  craftMacro: craftMacroImg,
+  hijabChocolate: hijabChocolateImg,
+  dupattaRose: dupattaRoseImg,
 };
+
+const IMG = CATALOG_IMAGES;
+
+const LEGACY_ASSET_MAP: Record<string, string> = {
+  'hero_zari_hijab_1795097056066.jpg': heroHijabImg,
+  'hero_royal_dupatta_1795097060130.jpg': heroDupattaImg,
+  'cat_premium_hijabs_1795097097750.jpg': catHijabsImg,
+  'cat_elegant_naqaabs_1795097086094.jpg': catNaqaabsImg,
+  'cat_designer_dupattas_1795097061115.jpg': catDupattasImg,
+  'craft_zardozi_macro_1795097056186.jpg': craftMacroImg,
+  'prod_hijab_chocolate_zari_1795097064655.jpg': hijabChocolateImg,
+  'prod_dupatta_rose_nakashi_1795097080211.jpg': dupattaRoseImg,
+};
+
+export function resolveCatalogAssetUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.includes('/src/assets/images/')) {
+    const filename = url.split('/').pop() || '';
+    if (LEGACY_ASSET_MAP[filename]) return LEGACY_ASSET_MAP[filename];
+  }
+  return url;
+}
 
 export const DEFAULT_SETTINGS: StoreSettings = {
   announcementEn:

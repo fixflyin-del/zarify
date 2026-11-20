@@ -21,6 +21,7 @@ import {
   DEFAULT_PRODUCTS,
   DEFAULT_REELS,
   DEFAULT_SETTINGS,
+  resolveCatalogAssetUrl,
 } from './defaultCatalog';
 import type {
   Banner,
@@ -73,6 +74,53 @@ function toIsoString(val: unknown): string {
 function computeDiscount(selling: number, original: number): number {
   if (!original || original <= selling) return 0;
   return Math.round(((original - selling) / original) * 100);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms = 4500): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+const LOCAL_ORDERS_KEY = 'zarifly_my_orders_v1';
+
+export function saveLocalOrderReceipt(order: Order): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = loadLocalOrderReceipts();
+    const next = [order, ...existing.filter((o) => o.orderNumber !== order.orderNumber)].slice(0, 30);
+    window.localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage quota issues
+  }
+}
+
+export function loadLocalOrderReceipts(): Order[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(LOCAL_ORDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getLocalOrderByNumber(orderNumber: string): Order | null {
+  const clean = orderNumber.trim().toUpperCase();
+  return (
+    loadLocalOrderReceipts().find((o) => (o.orderNumber || '').toUpperCase() === clean) || null
+  );
 }
 
 // ============================================================================
@@ -232,10 +280,12 @@ export async function toggleWishlistDoc(uid: string, productId: string): Promise
 
 export async function fetchStoreSettings(): Promise<StoreSettings> {
   try {
-    const [webSnap, shipSnap] = await Promise.all([
-      getDoc(doc(db, 'website_settings', 'primary')),
-      getDoc(doc(db, 'shipping_settings', 'primary')),
-    ]);
+    const [webSnap, shipSnap] = await withTimeout(
+      Promise.all([
+        getDoc(doc(db, 'website_settings', 'primary')),
+        getDoc(doc(db, 'shipping_settings', 'primary')),
+      ])
+    );
     const web = webSnap.exists() ? webSnap.data() : {};
     const ship = shipSnap.exists() ? shipSnap.data() : {};
     return {
@@ -256,14 +306,17 @@ export async function fetchAllProductsEnriched(options?: {
   products: Product[];
   reviews: ReviewItem[];
 }> {
-  const [catSnap, prodSnap, varSnap, revSnap] = await Promise.all([
-    getDocs(collection(db, 'categories')),
-    getDocs(collection(db, 'products')),
-    getDocs(collection(db, 'product_variants')),
-    options?.includeAllReviews
-      ? getDocs(collection(db, 'reviews'))
-      : getDocs(query(collection(db, 'reviews'), where('status', '==', 'approved'))),
-  ]);
+  const [catSnap, prodSnap, varSnap, revSnap] = await withTimeout(
+    Promise.all([
+      getDocs(collection(db, 'categories')),
+      getDocs(collection(db, 'products')),
+      getDocs(collection(db, 'product_variants')),
+      options?.includeAllReviews
+        ? getDocs(collection(db, 'reviews'))
+        : getDocs(query(collection(db, 'reviews'), where('status', '==', 'approved'))),
+    ]),
+    options?.includeAllReviews ? 8000 : 4500
+  );
 
   const categories: Category[] = catSnap.empty
     ? DEFAULT_CATEGORIES
@@ -277,7 +330,7 @@ export async function fetchAllProductsEnriched(options?: {
             nameHi: data.nameHi || '',
             description: data.description || '',
             descriptionHi: data.descriptionHi || '',
-            imageUrl: data.imageUrl || '',
+            imageUrl: resolveCatalogAssetUrl(data.imageUrl || ''),
             sortOrder: Number(data.sortOrder ?? 0),
             isActive: data.isActive !== false,
             seoTitle: data.seoTitle || '',
@@ -327,7 +380,7 @@ export async function fetchAllProductsEnriched(options?: {
       sizeName: v.sizeName || 'Standard',
       priceOverride: v.priceOverride != null ? Number(v.priceOverride) : null,
       stockQuantity: Number(v.stockQuantity ?? 0),
-      imageUrl: v.imageUrl || '',
+      imageUrl: resolveCatalogAssetUrl(v.imageUrl || ''),
       isActive: v.isActive !== false,
     });
     variantsByProduct.set(v.productId, list);
@@ -381,7 +434,12 @@ export async function fetchAllProductsEnriched(options?: {
         isFeatured: Boolean(p.isFeatured),
         seoTitle: p.seoTitle || '',
         seoDescription: p.seoDescription || '',
-        images: Array.isArray(p.images) ? p.images : [],
+        images: Array.isArray(p.images)
+          ? p.images.map((im: any) => ({
+              ...im,
+              url: resolveCatalogAssetUrl(im?.url || ''),
+            }))
+          : [],
         variants,
         reviewCount: prodReviews.length,
         avgRating,
@@ -390,19 +448,22 @@ export async function fetchAllProductsEnriched(options?: {
     })
     .filter((p) => (options?.includeInactive ? true : p.isActive));
 
-  return { categories, products, reviews };
+  return { categories, products: products.length ? products : DEFAULT_PRODUCTS, reviews };
 }
 
 export async function fetchStorefrontBootstrap() {
   try {
     const [settings, { categories, products, reviews }, bannerSnap, reelSnap, blogSnap] =
-      await Promise.all([
-        fetchStoreSettings(),
-        fetchAllProductsEnriched({ includeInactive: false, includeAllReviews: false }),
-        getDocs(collection(db, 'banners')),
-        getDocs(collection(db, 'reels')),
-        getDocs(collection(db, 'blogs')),
-      ]);
+      await withTimeout(
+        Promise.all([
+          fetchStoreSettings(),
+          fetchAllProductsEnriched({ includeInactive: false, includeAllReviews: false }),
+          getDocs(collection(db, 'banners')),
+          getDocs(collection(db, 'reels')),
+          getDocs(collection(db, 'blogs')),
+        ]),
+        4500
+      );
 
     const banners: Banner[] = bannerSnap.empty
       ? DEFAULT_BANNERS
@@ -418,8 +479,8 @@ export async function fetchStorefrontBootstrap() {
               ctaText: b.ctaText || 'Shop Now',
               ctaTextHi: b.ctaTextHi || 'अभी खरीदें',
               ctaUrl: b.ctaUrl || '/shop',
-              desktopImageUrl: b.desktopImageUrl || '',
-              mobileImageUrl: b.mobileImageUrl || '',
+              desktopImageUrl: resolveCatalogAssetUrl(b.desktopImageUrl || ''),
+              mobileImageUrl: resolveCatalogAssetUrl(b.mobileImageUrl || ''),
               sortOrder: Number(b.sortOrder ?? 0),
               isActive: b.isActive !== false,
             };
@@ -438,7 +499,7 @@ export async function fetchStorefrontBootstrap() {
               title: r.title || '',
               caption: r.caption || '',
               videoUrl: r.videoUrl || '',
-              thumbnailUrl: r.thumbnailUrl || '',
+              thumbnailUrl: resolveCatalogAssetUrl(r.thumbnailUrl || ''),
               productId: r.productId || null,
               product: r.productId ? productMap.get(r.productId) || null : null,
               sortOrder: Number(r.sortOrder ?? 0),
@@ -462,7 +523,7 @@ export async function fetchStorefrontBootstrap() {
               excerptHi: b.excerptHi || '',
               content: b.content || '',
               contentHi: b.contentHi || '',
-              featuredImageUrl: b.featuredImageUrl || '',
+              featuredImageUrl: resolveCatalogAssetUrl(b.featuredImageUrl || ''),
               authorName: b.authorName || 'Sama Shaikh',
               category: b.category || 'Journal',
               seoTitle: b.seoTitle || '',
@@ -658,6 +719,7 @@ export async function submitContactMessage(input: {
 }
 
 export async function placeCustomerOrder(input: {
+  actorUserId?: string;
   shippingAddress: Order['shippingAddressJson'];
   paymentMethod: 'cod' | 'online';
   notes?: string;
@@ -679,25 +741,41 @@ export async function placeCustomerOrder(input: {
     totalPrice: number;
     imageUrl: string;
   }>;
-}): Promise<{ orderId: string; orderNumber: string }> {
+}): Promise<{ orderId: string; orderNumber: string; order: Order }> {
   const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error('Please sign in to place your ZARIFLY order securely.');
-  }
+  const cleanPhoneDigits = input.shippingAddress.mobile.replace(/\D/g, '');
+  const resolvedUserId =
+    currentUser?.uid ||
+    (input.actorUserId && /^(wa_[0-9]{10,15}|cod_[a-zA-Z0-9_-]{4,40})$/.test(input.actorUserId)
+      ? input.actorUserId
+      : cleanPhoneDigits.length >= 10
+        ? `wa_${cleanPhoneDigits.length === 10 ? `91${cleanPhoneDigits}` : cleanPhoneDigits}`
+        : `cod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+
+  const rawEmail = (input.shippingAddress.email || '').trim().toLowerCase();
+  const validEmail =
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(rawEmail)
+      ? rawEmail
+      : `wa${cleanPhoneDigits || Date.now()}@whatsapp.zarifly.in`;
 
   const orderId = makeDocId('ord');
   const orderNumber = `ZRF-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
   const paymentId = makeDocId('pay');
 
+  const normalizedAddress = {
+    ...input.shippingAddress,
+    email: validEmail,
+  };
+
   const batch = writeBatch(db);
 
   batch.set(doc(db, 'orders', orderId), {
     orderNumber,
-    userId: currentUser.uid,
-    customerName: input.shippingAddress.fullName.trim().slice(0, 120),
-    customerEmail: input.shippingAddress.email.trim().toLowerCase().slice(0, 160),
-    customerPhone: input.shippingAddress.mobile.trim().slice(0, 24),
-    shippingAddressJson: input.shippingAddress,
+    userId: resolvedUserId,
+    customerName: normalizedAddress.fullName.trim().slice(0, 120),
+    customerEmail: validEmail.slice(0, 160),
+    customerPhone: normalizedAddress.mobile.trim().slice(0, 24),
+    shippingAddressJson: normalizedAddress,
     subtotal: Number(input.subtotal),
     discountAmount: Number(input.discountAmount),
     couponCode: input.couponCode ? input.couponCode.trim().slice(0, 60) : null,
@@ -718,7 +796,7 @@ export async function placeCustomerOrder(input: {
   // Non-PII public tracking summary keyed by orderNumber
   batch.set(doc(db, 'order_tracking', orderNumber), {
     orderNumber,
-    userId: currentUser.uid,
+    userId: resolvedUserId,
     orderStatus: 'placed',
     paymentStatus: 'pending',
     paymentMethod: input.paymentMethod,
@@ -726,7 +804,7 @@ export async function placeCustomerOrder(input: {
     courierName: null,
     trackingNumber: null,
     estimatedDelivery: '4–6 business days',
-    cityState: `${input.shippingAddress.city}, ${input.shippingAddress.state}`.slice(0, 160),
+    cityState: `${normalizedAddress.city}, ${normalizedAddress.state}`.slice(0, 160),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -735,7 +813,7 @@ export async function placeCustomerOrder(input: {
   batch.set(doc(db, 'payments', paymentId), {
     orderId,
     orderNumber,
-    userId: currentUser.uid,
+    userId: resolvedUserId,
     method: input.paymentMethod,
     amount: Number(input.grandTotal),
     currency: 'INR',
@@ -745,13 +823,28 @@ export async function placeCustomerOrder(input: {
     updatedAt: serverTimestamp(),
   });
 
-  // Order items + bounded stock decrement
+  const savedItems: OrderItem[] = [];
   for (const item of input.items) {
     const itemId = makeDocId('oi');
+    savedItems.push({
+      id: itemId,
+      orderId,
+      orderNumber,
+      productId: item.productId,
+      variantId: item.variantId,
+      productName: item.productName.slice(0, 200),
+      sku: item.sku.slice(0, 80),
+      colorName: item.colorName.slice(0, 80),
+      sizeName: item.sizeName.slice(0, 80),
+      unitPrice: Number(item.unitPrice),
+      quantity: Number(item.quantity),
+      totalPrice: Number(item.totalPrice),
+      imageUrl: (item.imageUrl || '').slice(0, 1000),
+    });
     batch.set(doc(db, 'order_items', itemId), {
       orderId,
       orderNumber,
-      userId: currentUser.uid,
+      userId: resolvedUserId,
       productId: item.productId,
       variantId: item.variantId,
       productName: item.productName.slice(0, 200),
@@ -766,48 +859,104 @@ export async function placeCustomerOrder(input: {
     });
   }
 
+  const localReceipt: Order = {
+    id: orderId,
+    userId: resolvedUserId,
+    orderNumber,
+    customerName: normalizedAddress.fullName.trim().slice(0, 120),
+    customerEmail: validEmail.slice(0, 160),
+    customerPhone: normalizedAddress.mobile.trim().slice(0, 24),
+    shippingAddressJson: normalizedAddress,
+    subtotal: Number(input.subtotal),
+    discountAmount: Number(input.discountAmount),
+    couponCode: input.couponCode ? input.couponCode.trim().slice(0, 60) : null,
+    shippingFee: Number(input.shippingFee),
+    taxAmount: Number(input.taxAmount),
+    grandTotal: Number(input.grandTotal),
+    paymentMethod: input.paymentMethod,
+    paymentStatus: 'pending',
+    orderStatus: 'placed',
+    courierName: '',
+    trackingNumber: '',
+    estimatedDelivery: '4–6 business days',
+    notes: (input.notes || '').trim().slice(0, 1000),
+    createdAt: new Date().toISOString(),
+    items: savedItems,
+  };
+
   try {
     await batch.commit();
+    saveLocalOrderReceipt(localReceipt);
 
-    // Best-effort stock decrement for variants & inventory in Firestore
-    for (const item of input.items) {
-      try {
-        const varRef = doc(db, 'product_variants', item.variantId);
-        const varSnap = await getDoc(varRef);
-        if (varSnap.exists()) {
-          const curQty = Number(varSnap.data().stockQuantity || 0);
-          const nextQty = Math.max(0, curQty - Math.min(10, item.quantity));
-          if (nextQty < curQty) {
-            await updateDoc(varRef, {
-              stockQuantity: nextQty,
-              updatedAt: serverTimestamp(),
-            });
+    // Best-effort stock decrement when authenticated via Firebase Auth
+    if (currentUser) {
+      for (const item of input.items) {
+        try {
+          const varRef = doc(db, 'product_variants', item.variantId);
+          const varSnap = await getDoc(varRef);
+          if (varSnap.exists()) {
+            const curQty = Number(varSnap.data().stockQuantity || 0);
+            const nextQty = Math.max(0, curQty - Math.min(10, item.quantity));
+            if (nextQty < curQty) {
+              await updateDoc(varRef, {
+                stockQuantity: nextQty,
+                updatedAt: serverTimestamp(),
+              });
+            }
           }
-        }
-        const invRef = doc(db, 'inventory', item.variantId);
-        const invSnap = await getDoc(invRef);
-        if (invSnap.exists()) {
-          const curQty = Number(invSnap.data().stockQuantity || 0);
-          const nextQty = Math.max(0, curQty - Math.min(10, item.quantity));
-          if (nextQty < curQty) {
-            await updateDoc(invRef, {
-              stockQuantity: nextQty,
-              updatedAt: serverTimestamp(),
-            });
+          const invRef = doc(db, 'inventory', item.variantId);
+          const invSnap = await getDoc(invRef);
+          if (invSnap.exists()) {
+            const curQty = Number(invSnap.data().stockQuantity || 0);
+            const nextQty = Math.max(0, curQty - Math.min(10, item.quantity));
+            if (nextQty < curQty) {
+              await updateDoc(invRef, {
+                stockQuantity: nextQty,
+                updatedAt: serverTimestamp(),
+              });
+            }
           }
+        } catch {
+          // Non-blocking if starter fallback variant isn't seeded yet
         }
-      } catch {
-        // Non-blocking if starter fallback variant isn't seeded yet
       }
     }
 
-    return { orderId, orderNumber };
+    return { orderId, orderNumber, order: localReceipt };
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `orders/${orderId}`);
   }
 }
 
 export async function fetchMyOrders(uid: string): Promise<Order[]> {
+  // WhatsApp-authenticated users read their local receipts enriched with live status from Firestore order_tracking
+  if (!auth.currentUser || uid.startsWith('wa_')) {
+    const localOrders = loadLocalOrderReceipts().filter(
+      (o) => !o.userId || o.userId === uid || o.userId.startsWith('cod_')
+    );
+    const enriched = await Promise.all(
+      localOrders.map(async (ord) => {
+        try {
+          const live = await trackOrderPublic(ord.orderNumber);
+          if (live) {
+            return {
+              ...ord,
+              orderStatus: live.orderStatus,
+              paymentStatus: live.paymentStatus,
+              courierName: live.courierName || ord.courierName,
+              trackingNumber: live.trackingNumber || ord.trackingNumber,
+              estimatedDelivery: live.estimatedDelivery || ord.estimatedDelivery,
+            };
+          }
+        } catch {
+          // Keep cached order status if offline
+        }
+        return ord;
+      })
+    );
+    return enriched.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   try {
     const [orderSnap, itemSnap] = await Promise.all([
       getDocs(query(collection(db, 'orders'), where('userId', '==', uid))),
@@ -831,7 +980,7 @@ export async function fetchMyOrders(uid: string): Promise<Order[]> {
         unitPrice: Number(it.unitPrice || 0),
         quantity: Number(it.quantity || 1),
         totalPrice: Number(it.totalPrice || 0),
-        imageUrl: it.imageUrl || '',
+        imageUrl: resolveCatalogAssetUrl(it.imageUrl || ''),
       });
       itemsByOrder.set(it.orderId, list);
     }
@@ -872,70 +1021,92 @@ export async function fetchMyOrders(uid: string): Promise<Order[]> {
 
 export async function fetchOrderByNumberForUser(orderNumber: string): Promise<Order | null> {
   const currentUser = auth.currentUser;
-  if (!currentUser) return null;
-  try {
-    const snap = await getDocs(
-      query(
-        collection(db, 'orders'),
-        where('userId', '==', currentUser.uid),
-        where('orderNumber', '==', orderNumber)
-      )
-    );
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    const o = d.data();
-    const itemSnap = await getDocs(
-      query(
-        collection(db, 'order_items'),
-        where('userId', '==', currentUser.uid),
-        where('orderId', '==', d.id)
-      )
-    );
-    const items: OrderItem[] = itemSnap.docs.map((itDoc) => {
-      const it = itDoc.data();
-      return {
-        id: itDoc.id,
-        orderId: it.orderId,
-        orderNumber: it.orderNumber,
-        productId: it.productId,
-        variantId: it.variantId,
-        productName: it.productName,
-        sku: it.sku,
-        colorName: it.colorName,
-        sizeName: it.sizeName,
-        unitPrice: Number(it.unitPrice || 0),
-        quantity: Number(it.quantity || 1),
-        totalPrice: Number(it.totalPrice || 0),
-        imageUrl: it.imageUrl || '',
-      };
-    });
-    return {
-      id: d.id,
-      userId: o.userId,
-      orderNumber: o.orderNumber,
-      customerName: o.customerName,
-      customerEmail: o.customerEmail,
-      customerPhone: o.customerPhone,
-      shippingAddressJson: o.shippingAddressJson,
-      subtotal: Number(o.subtotal || 0),
-      discountAmount: Number(o.discountAmount || 0),
-      couponCode: o.couponCode || null,
-      shippingFee: Number(o.shippingFee || 0),
-      taxAmount: Number(o.taxAmount || 0),
-      grandTotal: Number(o.grandTotal || 0),
-      paymentMethod: o.paymentMethod || 'cod',
-      paymentStatus: o.paymentStatus || 'pending',
-      orderStatus: o.orderStatus || 'placed',
-      courierName: o.courierName || '',
-      trackingNumber: o.trackingNumber || '',
-      estimatedDelivery: o.estimatedDelivery || '',
-      notes: o.notes || '',
-      createdAt: toIsoString(o.createdAt),
-      items,
-    };
-  } catch (err) {
-    handleFirestoreError(err, OperationType.GET, `orders/${orderNumber}`);
+  if (currentUser) {
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'orders'),
+          where('userId', '==', currentUser.uid),
+          where('orderNumber', '==', orderNumber)
+        )
+      );
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        const o = d.data();
+        const itemSnap = await getDocs(
+          query(
+            collection(db, 'order_items'),
+            where('userId', '==', currentUser.uid),
+            where('orderId', '==', d.id)
+          )
+        );
+        const items: OrderItem[] = itemSnap.docs.map((itDoc) => {
+          const it = itDoc.data();
+          return {
+            id: itDoc.id,
+            orderId: it.orderId,
+            orderNumber: it.orderNumber,
+            productId: it.productId,
+            variantId: it.variantId,
+            productName: it.productName,
+            sku: it.sku,
+            colorName: it.colorName,
+            sizeName: it.sizeName,
+            unitPrice: Number(it.unitPrice || 0),
+            quantity: Number(it.quantity || 1),
+            totalPrice: Number(it.totalPrice || 0),
+            imageUrl: resolveCatalogAssetUrl(it.imageUrl || ''),
+          };
+        });
+        return {
+          id: d.id,
+          userId: o.userId,
+          orderNumber: o.orderNumber,
+          customerName: o.customerName,
+          customerEmail: o.customerEmail,
+          customerPhone: o.customerPhone,
+          shippingAddressJson: o.shippingAddressJson,
+          subtotal: Number(o.subtotal || 0),
+          discountAmount: Number(o.discountAmount || 0),
+          couponCode: o.couponCode || null,
+          shippingFee: Number(o.shippingFee || 0),
+          taxAmount: Number(o.taxAmount || 0),
+          grandTotal: Number(o.grandTotal || 0),
+          paymentMethod: o.paymentMethod || 'cod',
+          paymentStatus: o.paymentStatus || 'pending',
+          orderStatus: o.orderStatus || 'placed',
+          courierName: o.courierName || '',
+          trackingNumber: o.trackingNumber || '',
+          estimatedDelivery: o.estimatedDelivery || '',
+          notes: o.notes || '',
+          createdAt: toIsoString(o.createdAt),
+          items,
+        };
+      }
+    } catch {
+      // Fall through to local receipt check
+    }
   }
+
+  // Fallback for WhatsApp & Express COD orders placed from this browser
+  const local = getLocalOrderByNumber(orderNumber);
+  if (!local) return null;
+  try {
+    const live = await trackOrderPublic(orderNumber);
+    if (live) {
+      return {
+        ...local,
+        orderStatus: live.orderStatus,
+        paymentStatus: live.paymentStatus,
+        courierName: live.courierName || local.courierName,
+        trackingNumber: live.trackingNumber || local.trackingNumber,
+        estimatedDelivery: live.estimatedDelivery || local.estimatedDelivery,
+      };
+    }
+  } catch {
+    // Keep local snapshot
+  }
+  return local;
 }
 
 export async function trackOrderPublic(orderNumber: string): Promise<OrderTrackingSummary | null> {

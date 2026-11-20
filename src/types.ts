@@ -8,6 +8,7 @@ export interface User {
   phone: string;
   role: 'customer' | 'admin' | 'super_admin' | string;
   preferredLang: Language | string;
+  authProvider?: 'firebase' | 'whatsapp';
   createdAt?: string;
 }
 

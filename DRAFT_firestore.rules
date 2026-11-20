@@ -514,17 +514,30 @@ service cloud.firestore {
     // 4. Orders, Non-PII Tracking Mirror, Order Items, Payments
     // =========================================================================
 
+    function isCodCheckoutUserId(uid) {
+      return uid is string
+        && uid.size() >= 6
+        && uid.size() <= 60
+        && uid.matches('^(wa_[0-9]{10,15}|cod_[a-zA-Z0-9_-]{4,40})$');
+    }
+
     match /orders/{orderId} {
       allow get: if isValidId(orderId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
       allow list: if isListAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(orderId)
-        && isSignedIn()
         && isValidOrder(request.resource.data)
         && isRecentTime(request.resource.data.createdAt)
         && isRecentTime(request.resource.data.updatedAt)
         && (
           (
-            request.resource.data.userId == request.auth.uid
+            isSignedIn()
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.orderStatus == 'placed'
+            && request.resource.data.paymentStatus == 'pending'
+          )
+          || (
+            isCodCheckoutUserId(request.resource.data.userId)
+            && request.resource.data.paymentMethod == 'cod'
             && request.resource.data.orderStatus == 'placed'
             && request.resource.data.paymentStatus == 'pending'
           )
@@ -542,13 +555,19 @@ service cloud.firestore {
       allow get: if isValidId(orderNumber);
       allow list: if isListAdmin();
       allow create: if isValidId(orderNumber)
-        && isSignedIn()
         && isValidOrderTracking(request.resource.data, orderNumber)
         && isRecentTime(request.resource.data.createdAt)
         && isRecentTime(request.resource.data.updatedAt)
         && (
           (
-            request.resource.data.userId == request.auth.uid
+            isSignedIn()
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.orderStatus == 'placed'
+            && request.resource.data.paymentStatus == 'pending'
+          )
+          || (
+            isCodCheckoutUserId(request.resource.data.userId)
+            && request.resource.data.paymentMethod == 'cod'
             && request.resource.data.orderStatus == 'placed'
             && request.resource.data.paymentStatus == 'pending'
           )
@@ -566,10 +585,13 @@ service cloud.firestore {
       allow get: if isValidId(orderItemId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
       allow list: if isListAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(orderItemId)
-        && isSignedIn()
         && isValidOrderItem(request.resource.data)
         && isRecentTime(request.resource.data.createdAt)
-        && (request.resource.data.userId == request.auth.uid || isAdmin());
+        && (
+          (isSignedIn() && request.resource.data.userId == request.auth.uid)
+          || isCodCheckoutUserId(request.resource.data.userId)
+          || isAdmin()
+        );
       allow update: if isValidId(orderItemId) && isAdmin() && isValidOrderItem(request.resource.data);
       allow delete: if isValidId(orderItemId) && isAdmin();
     }
@@ -578,12 +600,12 @@ service cloud.firestore {
       allow get: if isValidId(paymentId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
       allow list: if isListAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isValidId(paymentId)
-        && isSignedIn()
         && isValidPayment(request.resource.data)
         && isRecentTime(request.resource.data.createdAt)
         && isRecentTime(request.resource.data.updatedAt)
         && (
-          (request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending')
+          (isSignedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending')
+          || (isCodCheckoutUserId(request.resource.data.userId) && request.resource.data.method == 'cod' && request.resource.data.status == 'pending')
           || isAdmin()
         );
       allow update: if isValidId(paymentId)
